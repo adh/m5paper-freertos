@@ -33,5 +33,9 @@ typedef struct it8951_area_s {
 
 void it8951_init(uint16_t vcomm);
 void it8951_get_system_info(it8951_device_info_t *device_info);
+void it8951_clear_screen(void);
+void it8951_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t gray);
+void it8951_update_area(it8951_area_t* area, int mode);
+void it8951_wait_display_ready(void);
 
 #endif

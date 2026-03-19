@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_log_buffer.h"
+#include <string.h>
 
 static const char* TAG = "it8951";
 
@@ -47,6 +48,13 @@ static const char* TAG = "it8951";
 #define USDEF_I80_CMD_GET_DEV_INFO 0x0302
 #define USDEF_I80_CMD_DPY_BUF_AREA 0x0037
 #define USDEF_I80_CMD_VCOM 0x0039
+
+#define IT8951_ENDIAN_LITTLE 0
+#define IT8951_ENDIAN_BIG 1
+#define IT8951_PANEL_ROTATION IT8951_ROTATE_0
+#define IT8951_MODE_INIT 0
+#define IT8951_MODE_DU 1
+#define IT8951_MODE_GC16 2
 
 // Register Base Address
 #define DISPLAY_REG_BASE 0x1000  // Register RW access
@@ -348,6 +356,7 @@ void it8951_set_vcom(uint16_t vcom) {
 }
 
 static it8951_device_info_t device_info;
+
 static void controller_init(uint16_t vcomm){
 
     transaction_end();
@@ -383,16 +392,6 @@ static void gpio_init(){
     delay(1000);
 }
 
-void it8951_init(uint16_t vcomm){
-    gpio_init();
-
-    ESP_LOGI(TAG, "SPI setup");
-    spi_setup(SPI_MASTER_FREQ_10M);
-
-    ESP_LOGI(TAG, "Initialization sequence start");
-    controller_init(vcomm);
-}
-
 static void set_target_memory_address(uint32_t dev_address){
     uint16_t h = (uint16_t)((dev_address >> 16) & 0x0000FFFF);
     uint16_t l = (uint16_t)(dev_address & 0x0000FFFF);
@@ -402,26 +401,57 @@ static void set_target_memory_address(uint32_t dev_address){
 }
 
 static void set_target_area(it8951_area_t* area){
+    const uint16_t load_image_arg =
+        (IT8951_ENDIAN_LITTLE << 8) | (IT8951_8BPP << 4) | IT8951_PANEL_ROTATION;
 
+    write_command(IT8951_TCON_LD_IMG_AREA);
+    write_data_word(load_image_arg);
+    write_data_word(area->x);
+    write_data_word(area->y);
+    write_data_word(area->w);
+    write_data_word(area->h);
 }
 
 uint32_t it8951_get_vram_base(){
     return device_info.memory_address_low | (device_info.memory_address_heigh << 16);
 }
 
-void it8951_clear_screen(){
+static void upload_area_solid(const it8951_area_t* area, uint8_t gray, int mode) {
+    size_t remaining = (size_t)area->w * area->h;
+
+    ESP_ERROR_ASSERT(buffer0);
+    memset(buffer0, gray, buffer_len);
+
     set_target_memory_address(it8951_get_vram_base());
+    set_target_area((it8951_area_t*)area);
+    while (remaining) {
+        size_t chunk = remaining < buffer_len ? remaining : buffer_len;
+        write_data(buffer0, chunk);
+        remaining -= chunk;
+    }
+    write_command(IT8951_TCON_LD_IMG_END);
+    it8951_update_area((it8951_area_t*)area, mode);
+    it8951_wait_display_ready();
+}
+
+void it8951_clear_screen(){
     it8951_area_t area = {
-        .x = 0, 
-        .y = 0, 
-        .w = device_info.width, 
+        .x = 0,
+        .y = 0,
+        .w = device_info.width,
         .h = device_info.height
     };
-    set_target_area(&area);
+
+    upload_area_solid(&area, 0xFF, IT8951_MODE_INIT);
 }
 
 void it8951_update_area(it8951_area_t* area, int mode){
-
+    write_command(USDEF_I80_CMD_DPY_AREA);
+    write_data_word(area->x);
+    write_data_word(area->y);
+    write_data_word(area->w);
+    write_data_word(area->h);
+    write_data_word((uint16_t)mode);
 }
 
 void it8951_wait_display_ready(){
@@ -438,4 +468,39 @@ void it8951_wait_display_ready(){
         }
         delay(20);
     }
+}
+
+void it8951_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t gray){
+    ESP_ERROR_ASSERT(x < device_info.width);
+    ESP_ERROR_ASSERT(y < device_info.height);
+
+    if (x + w > device_info.width) {
+        w = device_info.width - x;
+    }
+    if (y + h > device_info.height) {
+        h = device_info.height - y;
+    }
+
+    if (!w || !h) {
+        return;
+    }
+
+    it8951_area_t area = {
+        .x = x,
+        .y = y,
+        .w = w,
+        .h = h,
+    };
+
+    upload_area_solid(&area, gray, IT8951_MODE_GC16);
+}
+
+void it8951_init(uint16_t vcomm){
+    gpio_init();
+
+    ESP_LOGI(TAG, "SPI setup");
+    spi_setup(SPI_MASTER_FREQ_10M);
+
+    ESP_LOGI(TAG, "Initialization sequence start");
+    controller_init(vcomm);
 }
