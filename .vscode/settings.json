@@ -1,0 +1,39 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.espIdfPath": "/Users/dfox/esp/v5.4/esp-idf",
+    "idf.pythonInstallPath": "/opt/homebrew/bin/python3",
+    "idf.openOcdConfigs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
+    ],
+    "idf.port": "/dev/tty.usbserial-53190064911",
+    "idf.toolsPath": "/Users/dfox/.espressif",
+    "idf.flashType": "UART",
+    "files.associations": {
+        "*.COBOL*": "cobol",
+        "*.COB*": "cobol",
+        "*.COBCOPY*": "cobol",
+        "*.COPYBOOK*": "cobol",
+        "*.COPY*": "cobol",
+        "*.PL1*": "pl1",
+        "*.PLI*": "pl1",
+        "*.INC*": "pl1",
+        "*.INCLUDE*": "pl1",
+        "*.JCL*": "jcl",
+        "*.ASM*": "hlasm",
+        "*.ASSEMBLE*": "hlasm",
+        "*.HLASM*": "hlasm",
+        "*.HLA*": "hlasm",
+        "*.MACLIB*": "hlasm",
+        "*.EXEC*": "rexx",
+        "*.REXX*": "rexx",
+        "*.REXXINC*": "rexx",
+        "*.copyasm": "hlasm",
+        "*.macasm": "hlasm",
+        "*.bms": "hlasm",
+        "*.rex": "rexx",
+        "*.rexx": "rexx",
+        "esp_timer.h": "c"
+    },
+    "idf.currentSetup": "/Users/dfox/esp/v5.4/esp-idf"
+}
