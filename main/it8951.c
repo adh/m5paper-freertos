@@ -461,8 +461,25 @@ uint32_t it8951_get_vram_base(){
     return device_info.memory_address_low | (device_info.memory_address_heigh << 16);
 }
 
+static void log_upload_stats(const it8951_area_t* area, int64_t upload_start_us, int64_t update_start_us) {
+    const uint32_t pixels = (uint32_t)area->w * area->h;
+    const int64_t upload_time_us = update_start_us - upload_start_us;
+    const int64_t update_time_us = esp_timer_get_time() - update_start_us;
+
+    ESP_LOGI(TAG,
+             "Upload area x=%u y=%u w=%u h=%u pixels=%" PRIu32 " upload=%.2f ms update=%.2f ms",
+             area->x,
+             area->y,
+             area->w,
+             area->h,
+             pixels,
+             (double)upload_time_us / 1000.0,
+             (double)update_time_us / 1000.0);
+}
+
 static void upload_area_solid(const it8951_area_t* area, uint8_t gray, int mode) {
     size_t remaining = (size_t)area->w * area->h;
+    const int64_t upload_start_us = esp_timer_get_time();
 
     ESP_ERROR_ASSERT(buffer0);
     memset(buffer0, gray, buffer_len);
@@ -475,12 +492,15 @@ static void upload_area_solid(const it8951_area_t* area, uint8_t gray, int mode)
         remaining -= chunk;
     }
     write_command(IT8951_TCON_LD_IMG_END);
+    const int64_t update_start_us = esp_timer_get_time();
     it8951_update_area((it8951_area_t*)area, mode);
     it8951_wait_display_ready();
+    log_upload_stats(area, upload_start_us, update_start_us);
 }
 
 static void upload_area_8bpp(const it8951_area_t* area, const uint8_t* pixels, int mode) {
     size_t remaining = (size_t)area->w * area->h;
+    const int64_t upload_start_us = esp_timer_get_time();
 
     ESP_ERROR_ASSERT(pixels);
 
@@ -496,13 +516,16 @@ static void upload_area_8bpp(const it8951_area_t* area, const uint8_t* pixels, i
     }
 
     write_command(IT8951_TCON_LD_IMG_END);
+    const int64_t update_start_us = esp_timer_get_time();
     it8951_update_area((it8951_area_t*)area, mode);
     it8951_wait_display_ready();
+    log_upload_stats(area, upload_start_us, update_start_us);
 }
 
 static void upload_area_8bpp_stride(const it8951_area_t* area, const uint8_t* pixels, uint16_t stride, int mode) {
     ESP_ERROR_ASSERT(pixels);
     ESP_ERROR_ASSERT(stride >= area->w);
+    const int64_t upload_start_us = esp_timer_get_time();
 
     set_target_memory_address(it8951_get_vram_base());
     set_target_area((it8951_area_t*)area);
@@ -521,8 +544,10 @@ static void upload_area_8bpp_stride(const it8951_area_t* area, const uint8_t* pi
     }
 
     write_command(IT8951_TCON_LD_IMG_END);
+    const int64_t update_start_us = esp_timer_get_time();
     it8951_update_area((it8951_area_t*)area, mode);
     it8951_wait_display_ready();
+    log_upload_stats(area, upload_start_us, update_start_us);
 }
 
 void it8951_clear_screen(){
