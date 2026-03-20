@@ -34,6 +34,8 @@ void display_stroke_rect(int x, int y, int w, int h, uint16_t thickness, uint8_t
 void display_draw_roundrect(int x, int y, int w, int h, uint16_t radius, uint16_t thickness, uint8_t gray);
 void display_draw_line(int x0, int y0, int x1, int y1, uint16_t thickness, uint8_t gray);
 void display_draw_ellipse(int cx, int cy, uint16_t rx, uint16_t ry, uint16_t thickness, uint8_t gray);
+void display_draw_character(int x, int y, char c, display_rotation_t rotation, uint16_t scale, uint8_t gray);
+void display_draw_string(int x, int y, const char* text, display_rotation_t rotation, uint16_t scale, uint8_t gray);
 void display_pixmap_free(display_pixmap_t* pixmap);
 bool display_pixmap_blit(int x, int y, const display_pixmap_t* pixmap, display_rotation_t rotation, uint16_t scale, int transparent_color);
 bool display_pixmap_from_xbm3(display_pixmap_t* pixmap, const char* const* xpm);

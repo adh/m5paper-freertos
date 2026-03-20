@@ -8,6 +8,7 @@
 
 static const char* TAG = "main";
 static const uint16_t TEST_SPRITE_SCALE = 8;
+static const uint32_t BATTERY_TEXT_PERIOD_FRAMES = 5;
 
 typedef struct demo_box_s {
     int x;
@@ -50,6 +51,14 @@ static const char* const s_test_pixmap[] = {
     NULL,
 };
 
+static void draw_battery_text(float battery_voltage) {
+    char text[32];
+
+    snprintf(text, sizeof(text), "BAT %.3fV", battery_voltage);
+    display_fill_rect(30, 430, 280, 38, 0xEE);
+    display_draw_string(36, 438, text, DISPLAY_ROTATE_0, 2, 0x10);
+}
+
 static void draw_static_demo(void) {
     const uint16_t w = display_width();
     const uint16_t h = display_height();
@@ -66,6 +75,8 @@ static void draw_static_demo(void) {
     display_stroke_rect(70, 146, 148, 28, 2, 0x00);
     display_draw_roundrect(278, 42, 140, 86, 18, 5, 0x30);
     display_draw_ellipse(348, 176, 62, 36, 4, 0x70);
+    display_draw_string(44, 224, "PRIMITIVES", DISPLAY_ROTATE_0, 2, 0x10);
+    display_draw_string(430, 84, "M5PAPER", DISPLAY_ROTATE_90, 2, 0x20);
     display_draw_line(32, h - 180, split_x - 32, h - 180, 3, 0x10);
     display_draw_line(48, h - 72, split_x - 60, h - 220, 4, 0x70);
     display_draw_line(60, h - 220, split_x - 48, h - 72, 2, 0xA0);
@@ -142,10 +153,16 @@ void app_main(void)
 
     while (1) {
         float battery_voltage = 0.0f;
-        if (m5paper_battery_voltage(&battery_voltage)) {
+        const bool battery_ok = m5paper_battery_voltage(&battery_voltage);
+        if (battery_ok) {
             ESP_LOGI(TAG, "Battery voltage: %.3f V", battery_voltage);
         } else {
             ESP_LOGW(TAG, "Battery voltage read failed");
+        }
+
+        if ((frame % BATTERY_TEXT_PERIOD_FRAMES) == 0 && battery_ok) {
+            draw_battery_text(battery_voltage);
+            //display_update();
         }
 
         update_sprite_frame(frame++, &sprite);

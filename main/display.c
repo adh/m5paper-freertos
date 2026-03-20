@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define FONT8x16_IMPLEMENTATION
+#include "font8x16.h"
 #include "esp_log.h"
 #include "it8951.h"
 
@@ -289,6 +291,36 @@ static void set_pixel_unchecked(int x, int y, uint8_t gray) {
     s_framebuffer[(size_t)y * s_width + x] = gray;
 }
 
+static void draw_glyph_pixel(int x, int y, int gx, int gy, display_rotation_t rotation, uint16_t scale, uint8_t gray) {
+    int rx = gx;
+    int ry = gy;
+
+    switch (rotation) {
+        case DISPLAY_ROTATE_0:
+            break;
+        case DISPLAY_ROTATE_90:
+            rx = 15 - gy;
+            ry = gx;
+            break;
+        case DISPLAY_ROTATE_180:
+            rx = 7 - gx;
+            ry = 15 - gy;
+            break;
+        case DISPLAY_ROTATE_270:
+            rx = gy;
+            ry = 7 - gx;
+            break;
+        default:
+            break;
+    }
+
+    for (uint16_t sy = 0; sy < scale; ++sy) {
+        for (uint16_t sx = 0; sx < scale; ++sx) {
+            set_pixel_unchecked(x + rx * (int)scale + sx, y + ry * (int)scale + sy, gray);
+        }
+    }
+}
+
 static bool point_in_roundrect_local(int px, int py, int w, int h, int radius) {
     if (w <= 0 || h <= 0) {
         return false;
@@ -488,6 +520,64 @@ void display_draw_ellipse(int cx, int cy, uint16_t rx, uint16_t ry, uint16_t thi
     }
 
     mark_damage(cx - rx, cy - ry, rx * 2 + 1, ry * 2 + 1);
+}
+
+void display_draw_character(int x, int y, char c, display_rotation_t rotation, uint16_t scale, uint8_t gray) {
+    if (scale == 0) {
+        return;
+    }
+
+    const unsigned char* glyph = font8x16[(unsigned char)c];
+    for (int gy = 0; gy < 16; ++gy) {
+        const unsigned char row = glyph[gy];
+        for (int gx = 0; gx < 8; ++gx) {
+            if ((row & (0x80u >> gx)) == 0) {
+                continue;
+            }
+
+            draw_glyph_pixel(x, y, gx, gy, rotation, scale, gray);
+        }
+    }
+
+    if (rotation == DISPLAY_ROTATE_0 || rotation == DISPLAY_ROTATE_180) {
+        mark_damage(x, y, 8 * scale, 16 * scale);
+    } else {
+        mark_damage(x, y, 16 * scale, 8 * scale);
+    }
+}
+
+void display_draw_string(int x, int y, const char* text, display_rotation_t rotation, uint16_t scale, uint8_t gray) {
+    if (!text || scale == 0) {
+        return;
+    }
+
+    int cursor_x = x;
+    int cursor_y = y;
+    const int advance = 8 * (int)scale;
+
+    while (*text) {
+        display_draw_character(cursor_x, cursor_y, *text, rotation, scale, gray);
+
+        switch (rotation) {
+            case DISPLAY_ROTATE_0:
+                cursor_x += advance;
+                break;
+            case DISPLAY_ROTATE_90:
+                cursor_y += advance;
+                break;
+            case DISPLAY_ROTATE_180:
+                cursor_x -= advance;
+                break;
+            case DISPLAY_ROTATE_270:
+                cursor_y -= advance;
+                break;
+            default:
+                cursor_x += advance;
+                break;
+        }
+
+        ++text;
+    }
 }
 
 void display_pixmap_free(display_pixmap_t* pixmap) {
