@@ -19,6 +19,10 @@ void display_clear(uint8_t gray);
 void display_fill_rect(int x, int y, int w, int h, uint8_t gray);
 void display_stroke_rect(int x, int y, int w, int h, uint16_t thickness, uint8_t gray);
 void display_draw_line(int x0, int y0, int x1, int y1, uint16_t thickness, uint8_t gray);
+uint16_t display_xpm3_width(const char* const* xpm);
+uint16_t display_xpm3_height(const char* const* xpm);
+void display_xpm3_draw(int x, int y, const char* const* xpm);
+void display_xpm3_draw_scaled(int x, int y, const char* const* xpm, uint16_t scale);
 bool display_damaged(display_rect_t* rect);
 bool display_update(void);
 

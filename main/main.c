@@ -7,6 +7,7 @@
 #include "freertos/task.h"
 
 static const char* TAG = "main";
+static const uint16_t TEST_SPRITE_SCALE = 8;
 
 typedef struct demo_box_s {
     int x;
@@ -15,7 +16,36 @@ typedef struct demo_box_s {
     int vy;
     int w;
     int h;
-} demo_box_t;
+} demo_sprite_t;
+
+
+static const char* const s_test_pixmap[] = {
+    "24 24 4 1",
+    ". c None",
+    "X c #000000",
+    "o c #666666",
+    "+ c #DDDDDD",
+    "........................",
+    "..........XXXX..........",
+    "........XXXXXXXX........",
+    ".......XXooooooXX.......",
+    "......XXo++++++oXX......",
+    ".....XXo++XXXX++oXX.....",
+    "....XXo++XXXXXX++oXX....",
+    "...XXo++XX++++XX++oXX...",
+    "...XXo++XX++++XX++oXX...",
+    "...XXo++XXXXXXXX++oXX...",
+    "...XXo++++++++++++oXX...",
+    "....XXo++XXXXXX++oXX....",
+    ".....XXo++XXXX++oXX.....",
+    "......XXo++++++oXX......",
+    ".......XXooooooXX.......",
+    "........XXXXXXXX........",
+    ".......XX++XX++XX.......",
+    "......XX++XXXX++XX......",
+    "......XX++X..X++XX......",
+    "......XXXXXXXXXXXX......",
+};
 
 static void draw_static_demo(void) {
     const uint16_t w = display_width();
@@ -38,49 +68,46 @@ static void draw_static_demo(void) {
     display_update();
 }
 
-static void draw_box(const demo_box_t* box, uint8_t fill, uint8_t stroke) {
-    display_fill_rect(box->x, box->y, box->w, box->h, fill);
-    display_stroke_rect(box->x, box->y, box->w, box->h, 4, stroke);
-    display_draw_line(box->x, box->y, box->x + box->w - 1, box->y + box->h - 1, 2, stroke);
-    display_draw_line(box->x + box->w - 1, box->y, box->x, box->y + box->h - 1, 2, stroke);
+static void draw_sprite(const demo_sprite_t* sprite) {
+    display_xpm3_draw_scaled(sprite->x, sprite->y, s_test_pixmap, TEST_SPRITE_SCALE);
 }
 
-static void step_box(demo_box_t* box) {
+static void step_sprite(demo_sprite_t* sprite) {
     const int min_x = (int)(display_width() / 2) + 24;
-    const int max_x = (int)display_width() - box->w - 24;
+    const int max_x = (int)display_width() - sprite->w - 24;
     const int min_y = 24;
-    const int max_y = (int)display_height() - box->h - 24;
+    const int max_y = (int)display_height() - sprite->h - 24;
 
-    box->x += box->vx;
-    box->y += box->vy;
+    sprite->x += sprite->vx;
+    sprite->y += sprite->vy;
 
-    if (box->x <= min_x || box->x >= max_x) {
-        box->vx = -box->vx;
-        if (box->x < min_x) {
-            box->x = min_x;
+    if (sprite->x <= min_x || sprite->x >= max_x) {
+        sprite->vx = -sprite->vx;
+        if (sprite->x < min_x) {
+            sprite->x = min_x;
         }
-        if (box->x > max_x) {
-            box->x = max_x;
+        if (sprite->x > max_x) {
+            sprite->x = max_x;
         }
     }
 
-    if (box->y <= min_y || box->y >= max_y) {
-        box->vy = -box->vy;
-        if (box->y < min_y) {
-            box->y = min_y;
+    if (sprite->y <= min_y || sprite->y >= max_y) {
+        sprite->vy = -sprite->vy;
+        if (sprite->y < min_y) {
+            sprite->y = min_y;
         }
-        if (box->y > max_y) {
-            box->y = max_y;
+        if (sprite->y > max_y) {
+            sprite->y = max_y;
         }
     }
 }
 
-static void update_box_frame(uint32_t frame, demo_box_t* box) {
+static void update_sprite_frame(uint32_t frame, demo_sprite_t* sprite) {
     ESP_LOGI(TAG, "Draw demo frame %" PRIu32, frame);
 
-    display_fill_rect(box->x, box->y, box->w, box->h, 0xF4);
-    step_box(box);
-    draw_box(box, (uint8_t)(0x30 + ((frame % 5) * 0x18)), 0x00);
+    display_fill_rect(sprite->x, sprite->y, sprite->w, sprite->h, 0xF4);
+    step_sprite(sprite);
+    draw_sprite(sprite);
     display_update();
 }
 
@@ -92,16 +119,16 @@ void app_main(void)
     display_init(2300);
     draw_static_demo();
     uint32_t frame = 0;
-    demo_box_t box = {
+    demo_sprite_t sprite = {
         .x = (int)(display_width() / 2) + 36,
         .y = 44,
         .vx = 26,
         .vy = 18,
-        .w = 120,
-        .h = 84,
+        .w = display_xpm3_width(s_test_pixmap) * TEST_SPRITE_SCALE,
+        .h = display_xpm3_height(s_test_pixmap) * TEST_SPRITE_SCALE,
     };
 
-    draw_box(&box, 0x30, 0x00);
+    draw_sprite(&sprite);
     display_update();
 
     while (1) {
@@ -112,7 +139,7 @@ void app_main(void)
             ESP_LOGW(TAG, "Battery voltage read failed");
         }
 
-        update_box_frame(frame++, &box);
+        update_sprite_frame(frame++, &sprite);
         vTaskDelay(pdMS_TO_TICKS(2000));
     }   
 
