@@ -39,6 +39,7 @@ uint8_t* it8951_framebuffer(void);
 void it8951_clear_screen(void);
 void it8951_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t gray);
 void it8951_blit_8bpp(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* pixels);
+void it8951_blit_8bpp_stride(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* pixels, uint16_t stride);
 void it8951_update_area(it8951_area_t* area, int mode);
 void it8951_wait_display_ready(void);
 

@@ -1,166 +1,87 @@
+#include <inttypes.h>
 #include <stdio.h>
-#include <string.h>
-#include "it8951.h"
+#include "display.h"
 #include "m5paper.h"
-#include "esp_err.h"
 #include "esp_log.h"
-#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 static const char* TAG = "main";
 
+typedef struct demo_box_s {
+    int x;
+    int y;
+    int vx;
+    int vy;
+    int w;
+    int h;
+} demo_box_t;
 
-static void draw_orientation_pattern(void) {
-    const uint16_t w = it8951_width();
-    const uint16_t h = it8951_height();
-    uint8_t* pixels = it8951_framebuffer();
+static void draw_static_demo(void) {
+    const uint16_t w = display_width();
+    const uint16_t h = display_height();
+    const int split_x = w / 2;
 
-    ESP_LOGI(TAG, "Draw orientation pattern");
+    ESP_LOGI(TAG, "Draw static demo");
 
-    memset(pixels, 0xFF, (size_t)w * h);
+    display_clear(0xF4);
+    display_fill_rect(0, 0, split_x, h, 0xEE);
+    display_stroke_rect(18, 18, split_x - 36, h - 36, 4, 0x20);
+    display_fill_rect(36, 42, 80, 50, 0x10);
+    display_fill_rect(132, 42, 120, 50, 0x90);
+    display_stroke_rect(36, 112, 216, 96, 5, 0x40);
+    display_stroke_rect(70, 146, 148, 28, 2, 0x00);
+    display_draw_line(32, h - 180, split_x - 32, h - 180, 3, 0x10);
+    display_draw_line(48, h - 72, split_x - 60, h - 220, 4, 0x70);
+    display_draw_line(60, h - 220, split_x - 48, h - 72, 2, 0xA0);
 
-    for (uint16_t y = 0; y < h; ++y) {
-        for (uint16_t x = 0; x < w; ++x) {
-            pixels[(size_t)y * w + x] = (uint8_t)((x * 255u) / (w - 1));
-        }
-    }
-
-    const uint16_t margin = 20;
-    const uint16_t corner = 90;
-    const uint16_t axis = 24;
-    const uint16_t step = 36;
-
-    for (uint16_t yy = margin; yy < margin + corner; ++yy) {
-        for (uint16_t xx = margin; xx < margin + corner; ++xx) {
-            pixels[(size_t)yy * w + xx] = 0x00;
-        }
-    }
-    for (uint16_t yy = margin; yy < margin + corner; ++yy) {
-        for (uint16_t xx = w - margin - corner; xx < w - margin; ++xx) {
-            pixels[(size_t)yy * w + xx] = 0x55;
-        }
-    }
-    for (uint16_t yy = h - margin - corner; yy < h - margin; ++yy) {
-        for (uint16_t xx = margin; xx < margin + corner; ++xx) {
-            pixels[(size_t)yy * w + xx] = 0xAA;
-        }
-    }
-    for (uint16_t yy = h - margin - corner; yy < h - margin; ++yy) {
-        for (uint16_t xx = w - margin - corner; xx < w - margin; ++xx) {
-            pixels[(size_t)yy * w + xx] = 0xCC;
-        }
-    }
-
-    for (uint16_t yy = margin + corner + 10; yy < margin + corner + 10 + axis; ++yy) {
-        for (uint16_t xx = margin; xx < margin + (w / 3); ++xx) {
-            pixels[(size_t)yy * w + xx] = 0x00;
-        }
-    }
-    for (uint16_t yy = margin; yy < margin + (h / 3); ++yy) {
-        for (uint16_t xx = margin + corner + 10; xx < margin + corner + 10 + axis; ++xx) {
-            pixels[(size_t)yy * w + xx] = 0x00;
-        }
-    }
-
-    for (uint16_t i = 0; i < 5; ++i) {
-        uint16_t left = margin + 140 + (i * step);
-        uint16_t top = margin + corner + 50 + (i * 10);
-        uint8_t gray = (uint8_t)(0x20 + (i * 0x20));
-
-        for (uint16_t yy = top; yy < top + 24; ++yy) {
-            for (uint16_t xx = left; xx < left + 24; ++xx) {
-                pixels[(size_t)yy * w + xx] = gray;
-            }
-        }
-    }
-
-    for (uint16_t i = 0; i < 5; ++i) {
-        uint16_t left = margin + corner + 50 + (i * 10);
-        uint16_t top = margin + 140 + (i * step);
-        uint8_t gray = (uint8_t)(0x20 + (i * 0x20));
-
-        for (uint16_t yy = top; yy < top + 24; ++yy) {
-            for (uint16_t xx = left; xx < left + 24; ++xx) {
-                pixels[(size_t)yy * w + xx] = gray;
-            }
-        }
-    }
-
-    for (uint16_t yy = (h / 2) - 30; yy < (h / 2) + 30; ++yy) {
-        for (uint16_t xx = (w / 2) - 110; xx < (w / 2) + 110; ++xx) {
-            pixels[(size_t)yy * w + xx] = 0x00;
-        }
-    }
-    for (uint16_t yy = (h / 2) - 110; yy < (h / 2) + 110; ++yy) {
-        for (uint16_t xx = (w / 2) - 20; xx < (w / 2) + 20; ++xx) {
-            pixels[(size_t)yy * w + xx] = 0x77;
-        }
-    }
-
-    it8951_blit_8bpp(0, 0, w, h, pixels);
+    display_update();
 }
 
-static void draw_solid_color(uint8_t gray) {
-    const uint16_t w = it8951_width();
-    const uint16_t h = it8951_height();
-
-    ESP_LOGI(TAG, "Draw solid color: %02X", gray);
-
-    it8951_fill_rect(0, 0, w, h, gray);
+static void draw_box(const demo_box_t* box, uint8_t fill, uint8_t stroke) {
+    display_fill_rect(box->x, box->y, box->w, box->h, fill);
+    display_stroke_rect(box->x, box->y, box->w, box->h, 4, stroke);
+    display_draw_line(box->x, box->y, box->x + box->w - 1, box->y + box->h - 1, 2, stroke);
+    display_draw_line(box->x + box->w - 1, box->y, box->x, box->y + box->h - 1, 2, stroke);
 }
 
-static void draw_pixels() {
-        const uint16_t w = it8951_width();
-        const uint16_t h = it8951_height();
-        uint8_t* pixels = it8951_framebuffer();
-    
-        ESP_LOGI(TAG, "Draw pixels");
-    
-        for (uint16_t y = 0; y < h; ++y) {
-            for (uint16_t x = 0; x < w; ++x) {
-                pixels[(size_t)y * w + x] = (uint8_t)(((x + y) / 2 * 255u) / ((w + h) / 2 - 1));
-            }
+static void step_box(demo_box_t* box) {
+    const int min_x = (int)(display_width() / 2) + 24;
+    const int max_x = (int)display_width() - box->w - 24;
+    const int min_y = 24;
+    const int max_y = (int)display_height() - box->h - 24;
+
+    box->x += box->vx;
+    box->y += box->vy;
+
+    if (box->x <= min_x || box->x >= max_x) {
+        box->vx = -box->vx;
+        if (box->x < min_x) {
+            box->x = min_x;
         }
-    
-        it8951_blit_8bpp(0, 0, w, h, pixels);
-}
-
-static void draw_mandelbrot() {
-    const uint16_t w = it8951_width();
-    const uint16_t h = it8951_height();
-    uint8_t* pixels = it8951_framebuffer();
-
-    ESP_LOGI(TAG, "Draw Mandelbrot set");
-
-    it8951_fill_rect(0, 0, w, h, 0xff);
-    it8951_fill_rect(210, 250, h + 20, 40, 0x80);
-
-    for (uint16_t y = 0; y < h; ++y) {
-        ESP_LOGI(TAG, "Drawing line %d/%d", y + 1, h);
-        for (uint16_t x = 0; x < w; ++x) {
-            float zx = 0.0;
-            float zy = 0.0;
-            float cx = ((float)x / w) * 3.5f - 2.5f;
-            float cy = ((float)y / h) * 2.0f - 1.0f;
-
-            uint8_t iter = 0;
-            while (zx * zx + zy * zy < 4.0f && iter < 255) {
-                float tmp = zx * zx - zy * zy + cx;
-                zy = 2.0f * zx * zy + cy;
-                zx = tmp;
-                iter++;
-            }
-
-            pixels[(size_t)y * w + x] = iter;
+        if (box->x > max_x) {
+            box->x = max_x;
         }
-        if (y % 40 == 0) {
-            it8951_fill_rect(210 + y, 250, 40, 40, 0x00);
-        }
-
     }
 
-    it8951_blit_8bpp(0, 0, w, h, pixels);
+    if (box->y <= min_y || box->y >= max_y) {
+        box->vy = -box->vy;
+        if (box->y < min_y) {
+            box->y = min_y;
+        }
+        if (box->y > max_y) {
+            box->y = max_y;
+        }
+    }
+}
+
+static void update_box_frame(uint32_t frame, demo_box_t* box) {
+    ESP_LOGI(TAG, "Draw demo frame %" PRIu32, frame);
+
+    display_fill_rect(box->x, box->y, box->w, box->h, 0xF4);
+    step_box(box);
+    draw_box(box, (uint8_t)(0x30 + ((frame % 5) * 0x18)), 0x00);
+    display_update();
 }
 
 void app_main(void)
@@ -168,7 +89,21 @@ void app_main(void)
     ESP_LOGI(TAG, "hello world");
 
     m5paper_init();
-    it8951_init(2300);
+    display_init(2300);
+    draw_static_demo();
+    uint32_t frame = 0;
+    demo_box_t box = {
+        .x = (int)(display_width() / 2) + 36,
+        .y = 44,
+        .vx = 26,
+        .vy = 18,
+        .w = 120,
+        .h = 84,
+    };
+
+    draw_box(&box, 0x30, 0x00);
+    display_update();
+
     while (1) {
         float battery_voltage = 0.0f;
         if (m5paper_battery_voltage(&battery_voltage)) {
@@ -177,13 +112,7 @@ void app_main(void)
             ESP_LOGW(TAG, "Battery voltage read failed");
         }
 
-        draw_orientation_pattern();
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        draw_solid_color(0x80);
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        draw_pixels();
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        draw_mandelbrot();
+        update_box_frame(frame++, &box);
         vTaskDelay(pdMS_TO_TICKS(2000));
     }   
 

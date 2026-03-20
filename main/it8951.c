@@ -441,6 +441,22 @@ static void set_target_area(it8951_area_t* area){
     write_data_word(area->h);
 }
 
+static void normalize_area_even_width(it8951_area_t* area) {
+    if ((area->w & 1u) == 0u || area->w == 0u) {
+        return;
+    }
+
+    if ((uint32_t)area->x + area->w < device_info.width) {
+        area->w += 1;
+        return;
+    }
+
+    if (area->x > 0) {
+        area->x -= 1;
+        area->w += 1;
+    }
+}
+
 uint32_t it8951_get_vram_base(){
     return device_info.memory_address_low | (device_info.memory_address_heigh << 16);
 }
@@ -477,6 +493,31 @@ static void upload_area_8bpp(const it8951_area_t* area, const uint8_t* pixels, i
         write_data(buffer0, chunk);
         pixels += chunk;
         remaining -= chunk;
+    }
+
+    write_command(IT8951_TCON_LD_IMG_END);
+    it8951_update_area((it8951_area_t*)area, mode);
+    it8951_wait_display_ready();
+}
+
+static void upload_area_8bpp_stride(const it8951_area_t* area, const uint8_t* pixels, uint16_t stride, int mode) {
+    ESP_ERROR_ASSERT(pixels);
+    ESP_ERROR_ASSERT(stride >= area->w);
+
+    set_target_memory_address(it8951_get_vram_base());
+    set_target_area((it8951_area_t*)area);
+
+    for (uint16_t row = 0; row < area->h; ++row) {
+        const uint8_t* row_pixels = pixels + ((size_t)row * stride);
+        size_t remaining = area->w;
+
+        while (remaining) {
+            size_t chunk = remaining < buffer_len ? remaining : buffer_len;
+            memcpy(buffer0, row_pixels, chunk);
+            write_data(buffer0, chunk);
+            row_pixels += chunk;
+            remaining -= chunk;
+        }
     }
 
     write_command(IT8951_TCON_LD_IMG_END);
@@ -542,6 +583,7 @@ void it8951_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t gr
         .h = h,
     };
 
+    normalize_area_even_width(&area);
     upload_area_solid(&area, gray, IT8951_MODE_GC16);
 }
 
@@ -567,7 +609,34 @@ void it8951_blit_8bpp(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint
         .h = h,
     };
 
+    normalize_area_even_width(&area);
     upload_area_8bpp(&area, pixels, IT8951_MODE_GC16);
+}
+
+void it8951_blit_8bpp_stride(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* pixels, uint16_t stride) {
+    ESP_ERROR_ASSERT(x < device_info.width);
+    ESP_ERROR_ASSERT(y < device_info.height);
+
+    if (x + w > device_info.width) {
+        w = device_info.width - x;
+    }
+    if (y + h > device_info.height) {
+        h = device_info.height - y;
+    }
+
+    if (!w || !h) {
+        return;
+    }
+
+    it8951_area_t area = {
+        .x = x,
+        .y = y,
+        .w = w,
+        .h = h,
+    };
+
+    normalize_area_even_width(&area);
+    upload_area_8bpp_stride(&area, pixels, stride, IT8951_MODE_GC16);
 }
 
 void it8951_init(uint16_t vcomm){
