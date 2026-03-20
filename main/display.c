@@ -36,6 +36,11 @@ typedef struct xpm3_color_s {
     bool transparent;
 } xpm3_color_t;
 
+typedef struct pixmap_size_s {
+    int width;
+    int height;
+} pixmap_size_t;
+
 static bool parse_xpm3_header(const char* const* xpm, xpm3_header_t* header) {
     if (!xpm || !xpm[0] || !header) {
         return false;
@@ -172,6 +177,47 @@ static const xpm3_color_t* find_xpm3_color(const xpm3_color_t* colors, int count
     }
 
     return NULL;
+}
+
+static pixmap_size_t rotated_pixmap_size(const display_pixmap_t* pixmap, display_rotation_t rotation) {
+    pixmap_size_t size = {
+        .width = pixmap ? pixmap->width : 0,
+        .height = pixmap ? pixmap->height : 0,
+    };
+
+    if (rotation == DISPLAY_ROTATE_90 || rotation == DISPLAY_ROTATE_270) {
+        const int tmp = size.width;
+        size.width = size.height;
+        size.height = tmp;
+    }
+
+    return size;
+}
+
+static uint8_t pixmap_sample_rotated(const display_pixmap_t* pixmap, int rx, int ry, display_rotation_t rotation) {
+    int src_x = rx;
+    int src_y = ry;
+
+    switch (rotation) {
+        case DISPLAY_ROTATE_0:
+            break;
+        case DISPLAY_ROTATE_90:
+            src_x = ry;
+            src_y = pixmap->height - 1 - rx;
+            break;
+        case DISPLAY_ROTATE_180:
+            src_x = pixmap->width - 1 - rx;
+            src_y = pixmap->height - 1 - ry;
+            break;
+        case DISPLAY_ROTATE_270:
+            src_x = pixmap->width - 1 - ry;
+            src_y = rx;
+            break;
+        default:
+            break;
+    }
+
+    return pixmap->pixels[(size_t)src_y * pixmap->width + src_x];
 }
 
 static bool clip_rect(int* x, int* y, int* w, int* h) {
@@ -319,6 +365,141 @@ void display_draw_line(int x0, int y0, int x1, int y1, uint16_t thickness, uint8
     }
 }
 
+void display_pixmap_free(display_pixmap_t* pixmap) {
+    if (!pixmap) {
+        return;
+    }
+
+    free(pixmap->pixels);
+    pixmap->pixels = NULL;
+    pixmap->width = 0;
+    pixmap->height = 0;
+}
+
+bool display_pixmap_blit(int x, int y, const display_pixmap_t* pixmap, display_rotation_t rotation, uint16_t scale, int transparent_color) {
+    if (!pixmap || !pixmap->pixels || pixmap->width == 0 || pixmap->height == 0 || scale == 0) {
+        return false;
+    }
+
+    const pixmap_size_t rotated = rotated_pixmap_size(pixmap, rotation);
+    bool touched = false;
+
+    for (int ry = 0; ry < rotated.height; ++ry) {
+        for (int rx = 0; rx < rotated.width; ++rx) {
+            const uint8_t gray = pixmap_sample_rotated(pixmap, rx, ry, rotation);
+            if (transparent_color >= 0 && gray == (uint8_t)transparent_color) {
+                continue;
+            }
+
+            for (uint16_t sy = 0; sy < scale; ++sy) {
+                const int dst_y = y + (ry * (int)scale) + sy;
+                if (dst_y < 0 || dst_y >= s_height) {
+                    continue;
+                }
+
+                for (uint16_t sx = 0; sx < scale; ++sx) {
+                    const int dst_x = x + (rx * (int)scale) + sx;
+                    if (dst_x < 0 || dst_x >= s_width) {
+                        continue;
+                    }
+
+                    s_framebuffer[(size_t)dst_y * s_width + dst_x] = gray;
+                    touched = true;
+                }
+            }
+        }
+    }
+
+    if (touched) {
+        mark_damage(x, y, rotated.width * scale, rotated.height * scale);
+    }
+
+    return touched;
+}
+
+bool display_pixmap_from_xbm3(display_pixmap_t* pixmap, const char* const* xpm) {
+    xpm3_header_t header;
+    if (!pixmap || !parse_xpm3_header(xpm, &header)) {
+        return false;
+    }
+
+    xpm3_color_t* colors = calloc((size_t)header.colors, sizeof(*colors));
+    uint8_t* pixels = malloc((size_t)header.width * header.height);
+    if (!colors || !pixels) {
+        free(colors);
+        free(pixels);
+        return false;
+    }
+
+    bool ok = true;
+    for (int i = 0; i < header.colors; ++i) {
+        const char* line = xpm[1 + i];
+        if (!line || (int)strlen(line) < header.cpp) {
+            ok = false;
+            break;
+        }
+
+        colors[i].key = line;
+        const char* value = find_xpm3_color_token(line + header.cpp);
+        if (!parse_xpm3_color_value(value, &colors[i].gray, &colors[i].transparent)) {
+            ok = false;
+            break;
+        }
+    }
+
+    for (int yy = 0; ok && yy < header.height; ++yy) {
+        const char* row = xpm[1 + header.colors + yy];
+        if (!row || (int)strlen(row) < header.width * header.cpp) {
+            ok = false;
+            break;
+        }
+
+        for (int xx = 0; xx < header.width; ++xx) {
+            const xpm3_color_t* color = find_xpm3_color(colors, header.colors, row + ((size_t)xx * header.cpp), header.cpp);
+            if (!color) {
+                ok = false;
+                break;
+            }
+
+            pixels[(size_t)yy * header.width + xx] = color->transparent ? 0xFF : color->gray;
+        }
+    }
+
+    free(colors);
+
+    if (!ok) {
+        free(pixels);
+        return false;
+    }
+
+    display_pixmap_free(pixmap);
+    pixmap->width = (uint16_t)header.width;
+    pixmap->height = (uint16_t)header.height;
+    pixmap->pixels = pixels;
+    return true;
+}
+
+bool display_pixmap_get(display_pixmap_t* pixmap, int x, int y, int w, int h) {
+    if (!pixmap || !clip_rect(&x, &y, &w, &h)) {
+        return false;
+    }
+
+    uint8_t* pixels = malloc((size_t)w * h);
+    if (!pixels) {
+        return false;
+    }
+
+    for (int yy = 0; yy < h; ++yy) {
+        memcpy(&pixels[(size_t)yy * w], &s_framebuffer[(size_t)(y + yy) * s_width + x], (size_t)w);
+    }
+
+    display_pixmap_free(pixmap);
+    pixmap->width = (uint16_t)w;
+    pixmap->height = (uint16_t)h;
+    pixmap->pixels = pixels;
+    return true;
+}
+
 uint16_t display_xpm3_width(const char* const* xpm) {
     xpm3_header_t header;
     return parse_xpm3_header(xpm, &header) ? (uint16_t)header.width : 0;
@@ -334,85 +515,14 @@ void display_xpm3_draw(int x, int y, const char* const* xpm) {
 }
 
 void display_xpm3_draw_scaled(int x, int y, const char* const* xpm, uint16_t scale) {
-    xpm3_header_t header;
-    if (scale == 0 || !parse_xpm3_header(xpm, &header)) {
-        ESP_LOGW(TAG, "Invalid XPM3 header");
+    display_pixmap_t pixmap = {0};
+    if (!display_pixmap_from_xbm3(&pixmap, xpm)) {
+        ESP_LOGW(TAG, "Invalid XPM3 pixmap");
         return;
     }
 
-    xpm3_color_t* colors = calloc((size_t)header.colors, sizeof(*colors));
-    if (!colors) {
-        ESP_LOGE(TAG, "Failed to allocate XPM3 color table");
-        return;
-    }
-
-    bool ok = true;
-    for (int i = 0; i < header.colors; ++i) {
-        const char* line = xpm[1 + i];
-        if (!line || (int)strlen(line) < header.cpp) {
-            ok = false;
-            break;
-        }
-
-        colors[i].key = line;
-
-        const char* value = find_xpm3_color_token(line + header.cpp);
-        if (!parse_xpm3_color_value(value, &colors[i].gray, &colors[i].transparent)) {
-            ok = false;
-            break;
-        }
-    }
-
-    if (!ok) {
-        ESP_LOGW(TAG, "Invalid XPM3 palette");
-        free(colors);
-        return;
-    }
-
-    bool touched = false;
-    for (int yy = 0; yy < header.height; ++yy) {
-        const char* row = xpm[1 + header.colors + yy];
-        if (!row) {
-            break;
-        }
-
-        for (int xx = 0; xx < header.width; ++xx) {
-            const int dst_x = x + xx;
-            const int dst_y = y + yy;
-            if (dst_x < 0 || dst_y < 0 || dst_x >= s_width || dst_y >= s_height) {
-                continue;
-            }
-
-            const char* key = row + ((size_t)xx * header.cpp);
-            const xpm3_color_t* color = find_xpm3_color(colors, header.colors, key, header.cpp);
-            if (!color || color->transparent) {
-                continue;
-            }
-
-            for (uint16_t sy = 0; sy < scale; ++sy) {
-                const int scaled_y = y + (yy * (int)scale) + sy;
-                if (scaled_y < 0 || scaled_y >= s_height) {
-                    continue;
-                }
-
-                for (uint16_t sx = 0; sx < scale; ++sx) {
-                    const int scaled_x = x + (xx * (int)scale) + sx;
-                    if (scaled_x < 0 || scaled_x >= s_width) {
-                        continue;
-                    }
-
-                    s_framebuffer[(size_t)scaled_y * s_width + scaled_x] = color->gray;
-                    touched = true;
-                }
-            }
-        }
-    }
-
-    if (touched) {
-        mark_damage(x, y, header.width * scale, header.height * scale);
-    }
-
-    free(colors);
+    display_pixmap_blit(x, y, &pixmap, DISPLAY_ROTATE_0, scale, 0xFF);
+    display_pixmap_free(&pixmap);
 }
 
 bool display_damaged(display_rect_t* rect) {

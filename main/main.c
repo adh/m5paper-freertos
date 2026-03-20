@@ -18,9 +18,11 @@ typedef struct demo_box_s {
     int h;
 } demo_sprite_t;
 
+static display_pixmap_t s_test_sprite;
+
 
 static const char* const s_test_pixmap[] = {
-    "24 24 4 1",
+    "24 20 4 1",
     ". c None",
     "X c #000000",
     "o c #666666",
@@ -45,6 +47,7 @@ static const char* const s_test_pixmap[] = {
     "......XX++XXXX++XX......",
     "......XX++X..X++XX......",
     "......XXXXXXXXXXXX......",
+    NULL,
 };
 
 static void draw_static_demo(void) {
@@ -69,7 +72,7 @@ static void draw_static_demo(void) {
 }
 
 static void draw_sprite(const demo_sprite_t* sprite) {
-    display_xpm3_draw_scaled(sprite->x, sprite->y, s_test_pixmap, TEST_SPRITE_SCALE);
+    display_pixmap_blit(sprite->x, sprite->y, &s_test_sprite, DISPLAY_ROTATE_0, TEST_SPRITE_SCALE, 0xFF);
 }
 
 static void step_sprite(demo_sprite_t* sprite) {
@@ -118,14 +121,18 @@ void app_main(void)
     m5paper_init();
     display_init(2300);
     draw_static_demo();
+    if (!display_pixmap_from_xbm3(&s_test_sprite, s_test_pixmap)) {
+        ESP_LOGE(TAG, "Failed to decode test pixmap");
+        return;
+    }
     uint32_t frame = 0;
     demo_sprite_t sprite = {
         .x = (int)(display_width() / 2) + 36,
         .y = 44,
         .vx = 26,
         .vy = 18,
-        .w = display_xpm3_width(s_test_pixmap) * TEST_SPRITE_SCALE,
-        .h = display_xpm3_height(s_test_pixmap) * TEST_SPRITE_SCALE,
+        .w = s_test_sprite.width * TEST_SPRITE_SCALE,
+        .h = s_test_sprite.height * TEST_SPRITE_SCALE,
     };
 
     draw_sprite(&sprite);
