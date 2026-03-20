@@ -434,6 +434,27 @@ static void upload_area_solid(const it8951_area_t* area, uint8_t gray, int mode)
     it8951_wait_display_ready();
 }
 
+static void upload_area_8bpp(const it8951_area_t* area, const uint8_t* pixels, int mode) {
+    size_t remaining = (size_t)area->w * area->h;
+
+    ESP_ERROR_ASSERT(pixels);
+
+    set_target_memory_address(it8951_get_vram_base());
+    set_target_area((it8951_area_t*)area);
+
+    while (remaining) {
+        size_t chunk = remaining < buffer_len ? remaining : buffer_len;
+        memcpy(buffer0, pixels, chunk);
+        write_data(buffer0, chunk);
+        pixels += chunk;
+        remaining -= chunk;
+    }
+
+    write_command(IT8951_TCON_LD_IMG_END);
+    it8951_update_area((it8951_area_t*)area, mode);
+    it8951_wait_display_ready();
+}
+
 void it8951_clear_screen(){
     it8951_area_t area = {
         .x = 0,
@@ -493,6 +514,31 @@ void it8951_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t gr
     };
 
     upload_area_solid(&area, gray, IT8951_MODE_GC16);
+}
+
+void it8951_blit_8bpp(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* pixels) {
+    ESP_ERROR_ASSERT(x < device_info.width);
+    ESP_ERROR_ASSERT(y < device_info.height);
+
+    if (x + w > device_info.width) {
+        w = device_info.width - x;
+    }
+    if (y + h > device_info.height) {
+        h = device_info.height - y;
+    }
+
+    if (!w || !h) {
+        return;
+    }
+
+    it8951_area_t area = {
+        .x = x,
+        .y = y,
+        .w = w,
+        .h = h,
+    };
+
+    upload_area_8bpp(&area, pixels, IT8951_MODE_GC16);
 }
 
 void it8951_init(uint16_t vcomm){
