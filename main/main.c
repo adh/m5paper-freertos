@@ -111,7 +111,7 @@ static void draw_orientation_pattern(void) {
     free(pixels);
 }
 
-void draw_solid_color(uint8_t gray) {
+static void draw_solid_color(uint8_t gray) {
     it8951_device_info_t info = {0};
     it8951_get_system_info(&info);
 
@@ -123,7 +123,7 @@ void draw_solid_color(uint8_t gray) {
     it8951_fill_rect(0, 0, w, h, gray);
 }
 
-void draw_pixels() {
+static void draw_pixels() {
         it8951_device_info_t info = {0};
         it8951_get_system_info(&info);
     
@@ -147,6 +147,51 @@ void draw_pixels() {
         free(pixels);
 }
 
+static void draw_mandelbrot() {
+    it8951_device_info_t info = {0};
+    it8951_get_system_info(&info);
+
+    const uint16_t w = info.width;
+    const uint16_t h = info.height;
+    uint8_t* pixels = heap_caps_malloc((size_t)w * h, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!pixels) {
+        ESP_LOGE(TAG, "framebuffer allocation failed");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Draw Mandelbrot set");
+
+    it8951_fill_rect(0, 0, w, h, 0xff);
+    it8951_fill_rect(210, 250, h + 20, 40, 0x80);
+
+    for (uint16_t y = 0; y < h; ++y) {
+        ESP_LOGI(TAG, "Drawing line %d/%d", y + 1, h);
+        for (uint16_t x = 0; x < w; ++x) {
+            float zx = 0.0;
+            float zy = 0.0;
+            float cx = ((float)x / w) * 3.5f - 2.5f;
+            float cy = ((float)y / h) * 2.0f - 1.0f;
+
+            uint8_t iter = 0;
+            while (zx * zx + zy * zy < 4.0f && iter < 255) {
+                float tmp = zx * zx - zy * zy + cx;
+                zy = 2.0f * zx * zy + cy;
+                zx = tmp;
+                iter++;
+            }
+
+            pixels[(size_t)y * w + x] = iter;
+        }
+        if (y % 40 == 0) {
+            it8951_fill_rect(210 + y, 250, 40, 40, 0x00);
+        }
+
+    }
+
+    it8951_blit_8bpp(0, 0, w, h, pixels);
+    free(pixels);
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "hello world");
@@ -157,9 +202,11 @@ void app_main(void)
         draw_orientation_pattern();
         vTaskDelay(pdMS_TO_TICKS(2000));
         draw_solid_color(0x80);
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(2000));
         draw_pixels();
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        draw_mandelbrot();
+        vTaskDelay(pdMS_TO_TICKS(2000));
     }   
 
 }
