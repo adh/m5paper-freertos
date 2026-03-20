@@ -170,6 +170,13 @@ void app_main(void)
     m5paper_init();
     it8951_init(2300);
     while (1) {
+        float battery_voltage = 0.0f;
+        if (m5paper_battery_voltage(&battery_voltage)) {
+            ESP_LOGI(TAG, "Battery voltage: %.3f V", battery_voltage);
+        } else {
+            ESP_LOGW(TAG, "Battery voltage read failed");
+        }
+
         draw_orientation_pattern();
         vTaskDelay(pdMS_TO_TICKS(2000));
         draw_solid_color(0x80);
