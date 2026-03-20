@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_log_buffer.h"
+#include "esp_heap_caps.h"
 #include <string.h>
 
 static const char* TAG = "it8951";
@@ -91,6 +92,8 @@ static spi_device_handle_t spi;
 static size_t buffer_len;
 static uint8_t* buffer0;
 static uint8_t* buffer1;
+static uint8_t* framebuffer;
+static size_t framebuffer_len;
 
 static void spi_setup(int clock_speed_hz) {
     if (!spi) {
@@ -357,11 +360,37 @@ void it8951_set_vcom(uint16_t vcom) {
 
 static it8951_device_info_t device_info;
 
+static void framebuffer_init(void) {
+    if (framebuffer) {
+        return;
+    }
+
+    framebuffer_len = (size_t)device_info.width * device_info.height;
+    ESP_LOGI(TAG, "Allocating %d bytes for framebuffer", framebuffer_len);
+
+    framebuffer = heap_caps_malloc(framebuffer_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    ESP_ERROR_ASSERT(framebuffer);
+}
+
+uint16_t it8951_width(void) {
+    return device_info.width;
+}
+
+uint16_t it8951_height(void) {
+    return device_info.height;
+}
+
+uint8_t* it8951_framebuffer(void) {
+    ESP_ERROR_ASSERT(framebuffer);
+    return framebuffer;
+}
+
 static void controller_init(uint16_t vcomm){
 
     transaction_end();
     it8951_set_system_run();
     it8951_get_system_info(&device_info);
+    framebuffer_init();
 
     write_reg(I80CPCR, 0x0001);
     it8951_set_vcom(vcomm);

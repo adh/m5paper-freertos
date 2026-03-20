@@ -1,7 +1,5 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include "esp_heap_caps.h"
 #include "it8951.h"
 #include "m5paper.h"
 #include "esp_err.h"
@@ -14,16 +12,9 @@ static const char* TAG = "main";
 
 
 static void draw_orientation_pattern(void) {
-    it8951_device_info_t info = {0};
-    it8951_get_system_info(&info);
-
-    const uint16_t w = info.width;
-    const uint16_t h = info.height;
-    uint8_t* pixels = heap_caps_malloc((size_t)w * h, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!pixels) {
-        ESP_LOGE(TAG, "framebuffer allocation failed");
-        return;
-    }
+    const uint16_t w = it8951_width();
+    const uint16_t h = it8951_height();
+    uint8_t* pixels = it8951_framebuffer();
 
     ESP_LOGI(TAG, "Draw orientation pattern");
 
@@ -108,15 +99,11 @@ static void draw_orientation_pattern(void) {
     }
 
     it8951_blit_8bpp(0, 0, w, h, pixels);
-    free(pixels);
 }
 
 static void draw_solid_color(uint8_t gray) {
-    it8951_device_info_t info = {0};
-    it8951_get_system_info(&info);
-
-    const uint16_t w = info.width;
-    const uint16_t h = info.height;
+    const uint16_t w = it8951_width();
+    const uint16_t h = it8951_height();
 
     ESP_LOGI(TAG, "Draw solid color: %02X", gray);
 
@@ -124,16 +111,9 @@ static void draw_solid_color(uint8_t gray) {
 }
 
 static void draw_pixels() {
-        it8951_device_info_t info = {0};
-        it8951_get_system_info(&info);
-    
-        const uint16_t w = info.width;
-        const uint16_t h = info.height;
-        uint8_t* pixels = heap_caps_malloc((size_t)w * h, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!pixels) {
-            ESP_LOGE(TAG, "framebuffer allocation failed");
-            return;
-        }
+        const uint16_t w = it8951_width();
+        const uint16_t h = it8951_height();
+        uint8_t* pixels = it8951_framebuffer();
     
         ESP_LOGI(TAG, "Draw pixels");
     
@@ -144,20 +124,12 @@ static void draw_pixels() {
         }
     
         it8951_blit_8bpp(0, 0, w, h, pixels);
-        free(pixels);
 }
 
 static void draw_mandelbrot() {
-    it8951_device_info_t info = {0};
-    it8951_get_system_info(&info);
-
-    const uint16_t w = info.width;
-    const uint16_t h = info.height;
-    uint8_t* pixels = heap_caps_malloc((size_t)w * h, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!pixels) {
-        ESP_LOGE(TAG, "framebuffer allocation failed");
-        return;
-    }
+    const uint16_t w = it8951_width();
+    const uint16_t h = it8951_height();
+    uint8_t* pixels = it8951_framebuffer();
 
     ESP_LOGI(TAG, "Draw Mandelbrot set");
 
@@ -189,7 +161,6 @@ static void draw_mandelbrot() {
     }
 
     it8951_blit_8bpp(0, 0, w, h, pixels);
-    free(pixels);
 }
 
 void app_main(void)

@@ -33,6 +33,9 @@ typedef struct it8951_area_s {
 
 void it8951_init(uint16_t vcomm);
 void it8951_get_system_info(it8951_device_info_t *device_info);
+uint16_t it8951_width(void);
+uint16_t it8951_height(void);
+uint8_t* it8951_framebuffer(void);
 void it8951_clear_screen(void);
 void it8951_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t gray);
 void it8951_blit_8bpp(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* pixels);
