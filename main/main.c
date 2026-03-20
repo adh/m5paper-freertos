@@ -64,6 +64,8 @@ static void draw_static_demo(void) {
     display_fill_rect(132, 42, 120, 50, 0x90);
     display_stroke_rect(36, 112, 216, 96, 5, 0x40);
     display_stroke_rect(70, 146, 148, 28, 2, 0x00);
+    display_draw_roundrect(278, 42, 140, 86, 18, 5, 0x30);
+    display_draw_ellipse(348, 176, 62, 36, 4, 0x70);
     display_draw_line(32, h - 180, split_x - 32, h - 180, 3, 0x10);
     display_draw_line(48, h - 72, split_x - 60, h - 220, 4, 0x70);
     display_draw_line(60, h - 220, split_x - 48, h - 72, 2, 0xA0);

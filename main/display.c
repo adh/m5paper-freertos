@@ -281,6 +281,46 @@ static void mark_damage(int x, int y, int w, int h) {
     }
 }
 
+static void set_pixel_unchecked(int x, int y, uint8_t gray) {
+    if (x < 0 || y < 0 || x >= s_width || y >= s_height) {
+        return;
+    }
+
+    s_framebuffer[(size_t)y * s_width + x] = gray;
+}
+
+static bool point_in_roundrect_local(int px, int py, int w, int h, int radius) {
+    if (w <= 0 || h <= 0) {
+        return false;
+    }
+
+    if (px < 0 || py < 0 || px >= w || py >= h) {
+        return false;
+    }
+
+    if (radius <= 0) {
+        return true;
+    }
+
+    const int inner_left = radius;
+    const int inner_right = w - radius;
+    const int inner_top = radius;
+    const int inner_bottom = h - radius;
+
+    if ((px >= inner_left && px < inner_right) || (py >= inner_top && py < inner_bottom)) {
+        return true;
+    }
+
+    const int corner_cx = px < inner_left ? radius - 1 : w - radius;
+    const int corner_cy = py < inner_top ? radius - 1 : h - radius;
+    const int dx2 = (px * 2 + 1) - (corner_cx * 2 + 1);
+    const int dy2 = (py * 2 + 1) - (corner_cy * 2 + 1);
+    const int dist4 = dx2 * dx2 + dy2 * dy2;
+    const int radius4 = radius * radius * 4;
+
+    return dist4 <= radius4;
+}
+
 void display_init(uint16_t vcomm) {
     it8951_init(vcomm);
     s_width = it8951_width();
@@ -335,6 +375,56 @@ void display_stroke_rect(int x, int y, int w, int h, uint16_t thickness, uint8_t
     display_fill_rect(x + w - thickness, y + thickness, thickness, h - ((int)thickness * 2), gray);
 }
 
+void display_draw_roundrect(int x, int y, int w, int h, uint16_t radius, uint16_t thickness, uint8_t gray) {
+    if (thickness == 0 || w <= 0 || h <= 0) {
+        return;
+    }
+
+    const int max_radius = (w < h ? w : h) / 2;
+    const int outer_radius = radius > (uint16_t)max_radius ? max_radius : (int)radius;
+    const int inner_w = w - ((int)thickness * 2);
+    const int inner_h = h - ((int)thickness * 2);
+
+    if (outer_radius <= 0) {
+        display_stroke_rect(x, y, w, h, thickness, gray);
+        return;
+    }
+
+    if (inner_w <= 0 || inner_h <= 0) {
+        for (int yy = 0; yy < h; ++yy) {
+            for (int xx = 0; xx < w; ++xx) {
+                if (point_in_roundrect_local(xx, yy, w, h, outer_radius)) {
+                    set_pixel_unchecked(x + xx, y + yy, gray);
+                }
+            }
+        }
+        mark_damage(x, y, w, h);
+        return;
+    }
+
+    int inner_radius = outer_radius - (int)thickness;
+    const int inner_max_radius = (inner_w < inner_h ? inner_w : inner_h) / 2;
+    if (inner_radius > inner_max_radius) {
+        inner_radius = inner_max_radius;
+    }
+
+    for (int yy = 0; yy < h; ++yy) {
+        for (int xx = 0; xx < w; ++xx) {
+            if (!point_in_roundrect_local(xx, yy, w, h, outer_radius)) {
+                continue;
+            }
+
+            if (point_in_roundrect_local(xx - (int)thickness, yy - (int)thickness, inner_w, inner_h, inner_radius)) {
+                continue;
+            }
+
+            set_pixel_unchecked(x + xx, y + yy, gray);
+        }
+    }
+
+    mark_damage(x, y, w, h);
+}
+
 void display_draw_line(int x0, int y0, int x1, int y1, uint16_t thickness, uint8_t gray) {
     if (thickness == 0) {
         return;
@@ -363,6 +453,41 @@ void display_draw_line(int x0, int y0, int x1, int y1, uint16_t thickness, uint8
             y0 += sy;
         }
     }
+}
+
+void display_draw_ellipse(int cx, int cy, uint16_t rx, uint16_t ry, uint16_t thickness, uint8_t gray) {
+    if (thickness == 0 || rx == 0 || ry == 0) {
+        return;
+    }
+
+    const int inner_rx = (int)rx - (int)thickness;
+    const int inner_ry = (int)ry - (int)thickness;
+    const int64_t outer_bound = (int64_t)rx * rx * ry * ry * 4;
+    const int64_t inner_bound = (inner_rx > 0 && inner_ry > 0)
+        ? (int64_t)inner_rx * inner_rx * inner_ry * inner_ry * 4
+        : -1;
+
+    for (int y = -(int)ry; y <= (int)ry; ++y) {
+        for (int x = -(int)rx; x <= (int)rx; ++x) {
+            const int x2 = x * 2 + (x >= 0 ? 1 : -1);
+            const int y2 = y * 2 + (y >= 0 ? 1 : -1);
+            const int64_t outer = (int64_t)x2 * x2 * ry * ry + (int64_t)y2 * y2 * rx * rx;
+            if (outer > outer_bound) {
+                continue;
+            }
+
+            if (inner_bound >= 0) {
+                const int64_t inner = (int64_t)x2 * x2 * inner_ry * inner_ry + (int64_t)y2 * y2 * inner_rx * inner_rx;
+                if (inner < inner_bound) {
+                    continue;
+                }
+            }
+
+            set_pixel_unchecked(cx + x, cy + y, gray);
+        }
+    }
+
+    mark_damage(cx - rx, cy - ry, rx * 2 + 1, ry * 2 + 1);
 }
 
 void display_pixmap_free(display_pixmap_t* pixmap) {
