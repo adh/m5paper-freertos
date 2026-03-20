@@ -4,6 +4,14 @@
 #include "esp_heap_caps.h"
 #include "it8951.h"
 #include "m5paper.h"
+#include "esp_err.h"
+#include "esp_log.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+static const char* TAG = "main";
+
 
 static void draw_orientation_pattern(void) {
     it8951_device_info_t info = {0};
@@ -13,9 +21,11 @@ static void draw_orientation_pattern(void) {
     const uint16_t h = info.height;
     uint8_t* pixels = heap_caps_malloc((size_t)w * h, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!pixels) {
-        puts("framebuffer allocation failed");
+        ESP_LOGE(TAG, "framebuffer allocation failed");
         return;
     }
+
+    ESP_LOGI(TAG, "Draw orientation pattern");
 
     memset(pixels, 0xFF, (size_t)w * h);
 
@@ -101,12 +111,55 @@ static void draw_orientation_pattern(void) {
     free(pixels);
 }
 
+void draw_solid_color(uint8_t gray) {
+    it8951_device_info_t info = {0};
+    it8951_get_system_info(&info);
+
+    const uint16_t w = info.width;
+    const uint16_t h = info.height;
+
+    ESP_LOGI(TAG, "Draw solid color: %02X", gray);
+
+    it8951_fill_rect(0, 0, w, h, gray);
+}
+
+void draw_pixels() {
+        it8951_device_info_t info = {0};
+        it8951_get_system_info(&info);
+    
+        const uint16_t w = info.width;
+        const uint16_t h = info.height;
+        uint8_t* pixels = heap_caps_malloc((size_t)w * h, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!pixels) {
+            ESP_LOGE(TAG, "framebuffer allocation failed");
+            return;
+        }
+    
+        ESP_LOGI(TAG, "Draw pixels");
+    
+        for (uint16_t y = 0; y < h; ++y) {
+            for (uint16_t x = 0; x < w; ++x) {
+                pixels[(size_t)y * w + x] = (uint8_t)(((x + y) / 2 * 255u) / ((w + h) / 2 - 1));
+            }
+        }
+    
+        it8951_blit_8bpp(0, 0, w, h, pixels);
+        free(pixels);
+}
+
 void app_main(void)
 {
-    puts("hello world");
+    ESP_LOGI(TAG, "hello world");
 
     m5paper_init();
     it8951_init(2300);
-    draw_orientation_pattern();
+    while (1) {
+        draw_orientation_pattern();
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        draw_solid_color(0x80);
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        draw_pixels();
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }   
 
 }
