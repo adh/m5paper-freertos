@@ -185,12 +185,18 @@ void app_main(void)
             continue;
         }
 
-        if (event.type == INPUT_EVENT_TOUCH_CHANGE) {
-            if (event.touch.touched) {
-                ESP_LOGI(TAG, "Touch x=%u y=%u size=%u points=%u", event.touch.x, event.touch.y, event.touch.size, event.touch.points);
-            } else {
-                ESP_LOGI(TAG, "Touch released");
-            }
+        if (event.type == INPUT_EVENT_TOUCH_PRESS) {
+            ESP_LOGI(TAG, "Touch press x=%u y=%u size=%u points=%u", event.touch.x, event.touch.y, event.touch.size, event.touch.points);
+            continue;
+        }
+
+        if (event.type == INPUT_EVENT_TOUCH_MOVE) {
+            ESP_LOGI(TAG, "Touch move x=%u y=%u size=%u points=%u", event.touch.x, event.touch.y, event.touch.size, event.touch.points);
+            continue;
+        }
+
+        if (event.type == INPUT_EVENT_TOUCH_RELEASE) {
+            ESP_LOGI(TAG, "Touch release");
             continue;
         }
 

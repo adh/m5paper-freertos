@@ -9,7 +9,9 @@
 
 typedef enum input_event_type_e {
     INPUT_EVENT_TIMEOUT = 0,
-    INPUT_EVENT_TOUCH_CHANGE,
+    INPUT_EVENT_TOUCH_PRESS,
+    INPUT_EVENT_TOUCH_MOVE,
+    INPUT_EVENT_TOUCH_RELEASE,
     INPUT_EVENT_DIRECTIONAL_BUTTON,
 } input_event_type_t;
 

@@ -43,13 +43,18 @@ uint8_t input_button_mask(void) {
     return input_button_mask_read();
 }
 
-static bool input_touch_equal(const gt911_touch_t* a, const gt911_touch_t* b) {
-    return a->touched == b->touched &&
-           a->points == b->points &&
-           a->track_id == b->track_id &&
-           a->x == b->x &&
+static bool input_touch_same_state(const gt911_touch_t* a, const gt911_touch_t* b) {
+    if (a->touched != b->touched) {
+        return false;
+    }
+
+    if (!a->touched) {
+        return true;
+    }
+
+    return a->x == b->x &&
            a->y == b->y &&
-           a->size == b->size;
+           a->points == b->points;
 }
 
 static bool input_touch_release_resolved(gt911_touch_t* touch) {
@@ -77,10 +82,10 @@ static bool input_pop_touch_change(input_event_t* event) {
 
     if (!touch.touched && s_last_touch.touched) {
         if (!input_touch_release_resolved(&touch)) {
-            if (touch.touched && !input_touch_equal(&touch, &s_last_touch)) {
+            if (touch.touched && !input_touch_same_state(&touch, &s_last_touch)) {
                 s_last_touch = touch;
                 memset(event, 0, sizeof(*event));
-                event->type = INPUT_EVENT_TOUCH_CHANGE;
+                event->type = INPUT_EVENT_TOUCH_MOVE;
                 event->touch = touch;
                 return true;
             }
@@ -88,13 +93,18 @@ static bool input_pop_touch_change(input_event_t* event) {
         }
     }
 
-    if (input_touch_equal(&touch, &s_last_touch)) {
+    if (input_touch_same_state(&touch, &s_last_touch)) {
         return false;
     }
 
+    const bool was_touched = s_last_touch.touched;
     s_last_touch = touch;
     memset(event, 0, sizeof(*event));
-    event->type = INPUT_EVENT_TOUCH_CHANGE;
+    if (touch.touched) {
+        event->type = was_touched ? INPUT_EVENT_TOUCH_MOVE : INPUT_EVENT_TOUCH_PRESS;
+    } else {
+        event->type = INPUT_EVENT_TOUCH_RELEASE;
+    }
     event->touch = touch;
     return true;
 }
