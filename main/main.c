@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "display.h"
 #include "gt911.h"
+#include "input.h"
 #include "m5paper.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -10,6 +11,7 @@
 static const char* TAG = "main";
 static const uint16_t TEST_SPRITE_SCALE = 8;
 static const uint32_t BATTERY_TEXT_PERIOD_FRAMES = 5;
+static const uint32_t INPUT_TIMEOUT_MS = 2000;
 
 typedef struct demo_box_s {
     int x;
@@ -128,6 +130,19 @@ static void update_sprite_frame(uint32_t frame, demo_sprite_t* sprite) {
     display_update();
 }
 
+static const char* input_button_name(input_button_t button) {
+    switch (button) {
+        case INPUT_BUTTON_UP:
+            return "up";
+        case INPUT_BUTTON_CENTER:
+            return "center";
+        case INPUT_BUTTON_DOWN:
+            return "down";
+        default:
+            return "?";
+    }
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "hello world");
@@ -156,22 +171,51 @@ void app_main(void)
     draw_sprite(&sprite);
     display_update();
 
+    const esp_err_t input_err = input_init();
+    if (input_err != ESP_OK) {
+        ESP_LOGW(TAG, "Input init failed: %s", esp_err_to_name(input_err));
+    }
+
     while (1) {
+        input_event_t event;
+        const esp_err_t event_err = input_wait_for_event_or_timeout(&event, INPUT_TIMEOUT_MS);
+        if (event_err != ESP_OK) {
+            ESP_LOGW(TAG, "Input wait failed: %s", esp_err_to_name(event_err));
+            vTaskDelay(pdMS_TO_TICKS(INPUT_TIMEOUT_MS));
+            continue;
+        }
+
+        if (event.type == INPUT_EVENT_TOUCH_CHANGE) {
+            if (event.touch.touched) {
+                ESP_LOGI(TAG, "Touch x=%u y=%u size=%u points=%u", event.touch.x, event.touch.y, event.touch.size, event.touch.points);
+            } else {
+                ESP_LOGI(TAG, "Touch released");
+            }
+            continue;
+        }
+
+        if (event.type == INPUT_EVENT_DIRECTIONAL_BUTTON) {
+            ESP_LOGI(TAG, "Button %s %s mask=0x%02x",
+                     input_button_name(event.button.button),
+                     event.button.pressed ? "pressed" : "released",
+                     event.button.pressed_mask);
+            continue;
+        }
+
         float battery_voltage = 0.0f;
         const bool battery_ok = m5paper_battery_voltage(&battery_voltage);
+        const uint8_t button_mask = input_button_mask();
         if (battery_ok) {
-            ESP_LOGI(TAG, "Battery voltage: %.3f V", battery_voltage);
+            ESP_LOGI(TAG, "Battery voltage: %.3f V, button mask=0x%02x", battery_voltage, button_mask);
         } else {
-            ESP_LOGW(TAG, "Battery voltage read failed");
+            ESP_LOGW(TAG, "Battery voltage read failed, button mask=0x%02x", button_mask);
         }
 
         if ((frame % BATTERY_TEXT_PERIOD_FRAMES) == 0 && battery_ok) {
             draw_battery_text(battery_voltage);
-            //display_update();
         }
 
         update_sprite_frame(frame++, &sprite);
-        vTaskDelay(pdMS_TO_TICKS(2000));
     }   
 
 }
