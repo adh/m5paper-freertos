@@ -755,6 +755,26 @@ bool display_damaged(display_rect_t* rect) {
     return true;
 }
 
+static void normalize_update_rect(display_rect_t* rect) {
+    if (!rect || rect->w == 0 || rect->h == 0) {
+        return;
+    }
+
+    if ((rect->x & 1u) != 0u) {
+        rect->x -= 1;
+        rect->w += 1;
+    }
+
+    if ((rect->w & 1u) != 0u) {
+        if ((uint32_t)rect->x + rect->w < s_width) {
+            rect->w += 1;
+        } else if (rect->x > 0) {
+            rect->x -= 1;
+            rect->w += 1;
+        }
+    }
+}
+
 bool display_update(void) {
     display_rect_t rect;
 
@@ -763,6 +783,7 @@ bool display_update(void) {
         return false;
     }
 
+    normalize_update_rect(&rect);
     ESP_LOGI(TAG, "Update damaged region x=%u y=%u w=%u h=%u", rect.x, rect.y, rect.w, rect.h);
     it8951_blit_8bpp_stride(rect.x, rect.y, rect.w, rect.h, s_framebuffer + ((size_t)rect.y * s_width + rect.x), s_width);
     s_damage.dirty = false;
