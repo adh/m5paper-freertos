@@ -8,6 +8,8 @@
 #include "esp_log.h"
 #include "esp_sleep.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char* TAG = "input";
 
@@ -50,10 +52,40 @@ static bool input_touch_equal(const gt911_touch_t* a, const gt911_touch_t* b) {
            a->size == b->size;
 }
 
+static bool input_touch_release_resolved(gt911_touch_t* touch) {
+    const TickType_t sample_delay = pdMS_TO_TICKS(15);
+    const int sample_count = 3;
+
+    for (int i = 0; i < sample_count; ++i) {
+        vTaskDelay(sample_delay);
+        if (gt911_get_touch(touch) != ESP_OK) {
+            return false;
+        }
+        if (touch->touched) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static bool input_pop_touch_change(input_event_t* event) {
     gt911_touch_t touch;
     if (gt911_get_touch(&touch) != ESP_OK) {
         return false;
+    }
+
+    if (!touch.touched && s_last_touch.touched) {
+        if (!input_touch_release_resolved(&touch)) {
+            if (touch.touched && !input_touch_equal(&touch, &s_last_touch)) {
+                s_last_touch = touch;
+                memset(event, 0, sizeof(*event));
+                event->type = INPUT_EVENT_TOUCH_CHANGE;
+                event->touch = touch;
+                return true;
+            }
+            return false;
+        }
     }
 
     if (input_touch_equal(&touch, &s_last_touch)) {
