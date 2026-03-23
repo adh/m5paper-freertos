@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "display.h"
+#include "gt911.h"
 #include "m5paper.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -132,6 +133,10 @@ void app_main(void)
     ESP_LOGI(TAG, "hello world");
 
     m5paper_init();
+    const esp_err_t touch_err = gt911_init();
+    if (touch_err != ESP_OK) {
+        ESP_LOGW(TAG, "GT911 init failed: %s", esp_err_to_name(touch_err));
+    }
     display_init(2300);
     draw_static_demo();
     if (!display_pixmap_from_xbm3(&s_test_sprite, s_test_pixmap)) {
