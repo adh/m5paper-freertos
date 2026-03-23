@@ -154,10 +154,10 @@ esp_err_t gt911_get_touch(gt911_touch_t* touch) {
     }
 
     touch->touched = true;
-    touch->track_id = point_data[0];
-    touch->x = (uint16_t)point_data[1] | ((uint16_t)point_data[2] << 8);
-    touch->y = (uint16_t)point_data[3] | ((uint16_t)point_data[4] << 8);
-    touch->size = (uint16_t)point_data[5] | ((uint16_t)point_data[6] << 8);
+    touch->track_id = 0;
+    touch->x = (uint16_t)point_data[0] | ((uint16_t)point_data[1] << 8);
+    touch->y = (uint16_t)point_data[2] | ((uint16_t)point_data[3] << 8);
+    touch->size = (uint16_t)point_data[4] | ((uint16_t)point_data[5] << 8);
 
     const uint8_t clear = 0;
     return gt911_write(GT911_REG_STATUS, &clear, sizeof(clear));

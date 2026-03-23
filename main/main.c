@@ -12,6 +12,10 @@ static const char* TAG = "main";
 static const uint16_t TEST_SPRITE_SCALE = 8;
 static const uint32_t BATTERY_TEXT_PERIOD_FRAMES = 5;
 static const uint32_t INPUT_TIMEOUT_MS = 2000;
+static const uint16_t TOUCH_MARKER_RADIUS = 12;
+static const uint16_t M5PAPER_TOUCH_RAW_WIDTH = 540;
+static const uint16_t M5PAPER_TOUCH_RAW_HEIGHT = 960;
+#define TOUCH_MARKER_CAPACITY 128
 
 typedef struct demo_box_s {
     int x;
@@ -23,6 +27,14 @@ typedef struct demo_box_s {
 } demo_sprite_t;
 
 static display_pixmap_t s_test_sprite;
+
+typedef struct touch_marker_s {
+    uint16_t x;
+    uint16_t y;
+} touch_marker_t;
+
+static touch_marker_t s_touch_markers[TOUCH_MARKER_CAPACITY];
+static size_t s_touch_marker_count;
 
 
 static const char* const s_test_pixmap[] = {
@@ -62,7 +74,7 @@ static void draw_battery_text(float battery_voltage) {
     display_draw_string(36, 438, text, DISPLAY_ROTATE_0, 2, 0x10);
 }
 
-static void draw_static_demo(void) {
+static void render_static_demo(void) {
     const uint16_t w = display_width();
     const uint16_t h = display_height();
     const int split_x = w / 2;
@@ -83,12 +95,69 @@ static void draw_static_demo(void) {
     display_draw_line(32, h - 180, split_x - 32, h - 180, 3, 0x10);
     display_draw_line(48, h - 72, split_x - 60, h - 220, 4, 0x70);
     display_draw_line(60, h - 220, split_x - 48, h - 72, 2, 0xA0);
-
-    display_update();
 }
 
 static void draw_sprite(const demo_sprite_t* sprite) {
     display_pixmap_blit(sprite->x, sprite->y, &s_test_sprite, DISPLAY_ROTATE_0, TEST_SPRITE_SCALE, 0xFF);
+}
+
+static void draw_touch_marker(uint16_t x, uint16_t y) {
+    display_draw_ellipse((int)x, (int)y, TOUCH_MARKER_RADIUS, TOUCH_MARKER_RADIUS, 2, 0x10);
+    display_draw_line((int)x - 7, (int)y, (int)x + 7, (int)y, 2, 0x10);
+    display_draw_line((int)x, (int)y - 7, (int)x, (int)y + 7, 2, 0x10);
+}
+
+static void draw_touch_markers(void) {
+    for (size_t i = 0; i < s_touch_marker_count; ++i) {
+        draw_touch_marker(s_touch_markers[i].x, s_touch_markers[i].y);
+    }
+}
+
+static void append_touch_marker(uint16_t x, uint16_t y) {
+    if (s_touch_marker_count == TOUCH_MARKER_CAPACITY) {
+        for (size_t i = 1; i < TOUCH_MARKER_CAPACITY; ++i) {
+            s_touch_markers[i - 1] = s_touch_markers[i];
+        }
+        s_touch_marker_count--;
+    }
+
+    s_touch_markers[s_touch_marker_count++] = (touch_marker_t){
+        .x = x,
+        .y = y,
+    };
+}
+
+static void reset_sprite(demo_sprite_t* sprite) {
+    *sprite = (demo_sprite_t){
+        .x = (int)(display_width() / 2) + 36,
+        .y = 44,
+        .vx = 26,
+        .vy = 18,
+        .w = s_test_sprite.width * TEST_SPRITE_SCALE,
+        .h = s_test_sprite.height * TEST_SPRITE_SCALE,
+    };
+}
+
+static void redraw_demo_scene(const demo_sprite_t* sprite) {
+    render_static_demo();
+    draw_sprite(sprite);
+    draw_touch_markers();
+    display_update();
+}
+
+static void scale_touch_to_display(const gt911_touch_t* touch, uint16_t* x, uint16_t* y) {
+    uint32_t raw_x = touch->x;
+    uint32_t raw_y = touch->y;
+
+    if (raw_x >= M5PAPER_TOUCH_RAW_WIDTH) {
+        raw_x = M5PAPER_TOUCH_RAW_WIDTH - 1;
+    }
+    if (raw_y >= M5PAPER_TOUCH_RAW_HEIGHT) {
+        raw_y = M5PAPER_TOUCH_RAW_HEIGHT - 1;
+    }
+
+    *x = (uint16_t)raw_y;
+    *y = (uint16_t)((M5PAPER_TOUCH_RAW_WIDTH - 1) - raw_x);
 }
 
 static void step_sprite(demo_sprite_t* sprite) {
@@ -127,6 +196,7 @@ static void update_sprite_frame(uint32_t frame, demo_sprite_t* sprite) {
     display_fill_rect(sprite->x, sprite->y, sprite->w, sprite->h, 0xF4);
     step_sprite(sprite);
     draw_sprite(sprite);
+    draw_touch_markers();
     display_update();
 }
 
@@ -153,23 +223,14 @@ void app_main(void)
         ESP_LOGW(TAG, "GT911 init failed: %s", esp_err_to_name(touch_err));
     }
     display_init(2300);
-    draw_static_demo();
     if (!display_pixmap_from_xbm3(&s_test_sprite, s_test_pixmap)) {
         ESP_LOGE(TAG, "Failed to decode test pixmap");
         return;
     }
     uint32_t frame = 0;
-    demo_sprite_t sprite = {
-        .x = (int)(display_width() / 2) + 36,
-        .y = 44,
-        .vx = 26,
-        .vy = 18,
-        .w = s_test_sprite.width * TEST_SPRITE_SCALE,
-        .h = s_test_sprite.height * TEST_SPRITE_SCALE,
-    };
-
-    draw_sprite(&sprite);
-    display_update();
+    demo_sprite_t sprite;
+    reset_sprite(&sprite);
+    redraw_demo_scene(&sprite);
 
     const esp_err_t input_err = input_init();
     if (input_err != ESP_OK) {
@@ -186,12 +247,26 @@ void app_main(void)
         }
 
         if (event.type == INPUT_EVENT_TOUCH_PRESS) {
-            ESP_LOGI(TAG, "Touch press x=%u y=%u size=%u points=%u", event.touch.x, event.touch.y, event.touch.size, event.touch.points);
+            uint16_t x;
+            uint16_t y;
+            scale_touch_to_display(&event.touch, &x, &y);
+            append_touch_marker(x, y);
+            draw_touch_marker(x, y);
+            display_update();
+            ESP_LOGI(TAG, "Touch press raw=(%u,%u) display=(%u,%u) size=%u points=%u",
+                     event.touch.x, event.touch.y, x, y, event.touch.size, event.touch.points);
             continue;
         }
 
         if (event.type == INPUT_EVENT_TOUCH_MOVE) {
-            ESP_LOGI(TAG, "Touch move x=%u y=%u size=%u points=%u", event.touch.x, event.touch.y, event.touch.size, event.touch.points);
+            uint16_t x;
+            uint16_t y;
+            scale_touch_to_display(&event.touch, &x, &y);
+            append_touch_marker(x, y);
+            draw_touch_marker(x, y);
+            display_update();
+            ESP_LOGI(TAG, "Touch move raw=(%u,%u) display=(%u,%u) size=%u points=%u",
+                     event.touch.x, event.touch.y, x, y, event.touch.size, event.touch.points);
             continue;
         }
 
@@ -205,16 +280,21 @@ void app_main(void)
                      input_button_name(event.button.button),
                      event.button.pressed ? "pressed" : "released",
                      event.button.pressed_mask);
+            if (event.button.button == INPUT_BUTTON_CENTER && event.button.pressed) {
+                s_touch_marker_count = 0;
+                frame = 0;
+                reset_sprite(&sprite);
+                redraw_demo_scene(&sprite);
+            }
             continue;
         }
 
         float battery_voltage = 0.0f;
         const bool battery_ok = m5paper_battery_voltage(&battery_voltage);
-        const uint8_t button_mask = input_button_mask();
         if (battery_ok) {
-            ESP_LOGI(TAG, "Battery voltage: %.3f V, button mask=0x%02x", battery_voltage, button_mask);
+            ESP_LOGI(TAG, "Battery voltage: %.3f V", battery_voltage);
         } else {
-            ESP_LOGW(TAG, "Battery voltage read failed, button mask=0x%02x", button_mask);
+            ESP_LOGW(TAG, "Battery voltage read failed");
         }
 
         if ((frame % BATTERY_TEXT_PERIOD_FRAMES) == 0 && battery_ok) {
