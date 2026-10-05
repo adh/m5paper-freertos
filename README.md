@@ -1,4 +1,36 @@
-# _Sample project_
+# M5Paper FreeRTOS playground
+
+## Widget tree
+
+`main/widget.h` provides an allocation-free window tree. Applications own the
+`widget_window_t` objects, attach them with `widget_window_add_child()`, and
+give each window a `widget_class_t` containing optional draw and event
+callbacks. Window frames are relative to their parents; later children are in
+front of earlier children.
+
+The application event loop is intentionally small:
+
+```c
+input_event_t event;
+if (input_wait_for_event_or_timeout(&event, timeout_ms) == ESP_OK) {
+    widget_dispatch_event(&root_window, &event);
+}
+```
+
+Touch coordinates in `input_event_t` are display coordinates. The original
+GT911 sample remains available as `event.touch.raw`. A press is hit-tested
+against the deepest, topmost visible and enabled window. Events bubble toward
+the root until handled, and the handler that accepts a press captures all move
+and release events for that gesture. Directional-button and timeout events are
+sent to the root. `widget_event_local_point()` converts a touch event to a
+window's local coordinate system.
+
+Call `widget_draw(&root_window)` to draw visible windows in back-to-front tree
+order. Each class draws into the existing display framebuffer; `display_update()`
+remains under application control so a caller can batch several changes into a
+single e-paper refresh.
+
+# Original ESP-IDF sample notes
 
 (See the README.md file in the upper level 'examples' directory for more information about examples.)
 

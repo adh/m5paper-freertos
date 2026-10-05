@@ -27,10 +27,16 @@ typedef struct input_button_event_s {
     uint8_t pressed_mask;
 } input_button_event_t;
 
+typedef struct input_touch_event_s {
+    uint16_t x;
+    uint16_t y;
+    gt911_touch_t raw;
+} input_touch_event_t;
+
 typedef struct input_event_s {
     input_event_type_t type;
     union {
-        gt911_touch_t touch;
+        input_touch_event_t touch;
         input_button_event_t button;
     };
 } input_event_t;

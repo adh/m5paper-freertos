@@ -17,6 +17,8 @@ static const char* TAG = "input";
 #define INPUT_BUTTON_UP_PIN GPIO_NUM_37
 #define INPUT_BUTTON_CENTER_PIN GPIO_NUM_38
 #define INPUT_BUTTON_DOWN_PIN GPIO_NUM_39
+#define INPUT_TOUCH_RAW_WIDTH 540
+#define INPUT_TOUCH_RAW_HEIGHT 960
 static bool s_initialized;
 static gt911_touch_t s_last_touch;
 static uint8_t s_last_button_mask;
@@ -74,6 +76,24 @@ static bool input_touch_release_resolved(gt911_touch_t* touch) {
     return true;
 }
 
+static void input_set_touch_event(input_event_t* event, input_event_type_t type, const gt911_touch_t* touch) {
+    uint16_t raw_x = touch->x;
+    uint16_t raw_y = touch->y;
+
+    if (raw_x >= INPUT_TOUCH_RAW_WIDTH) {
+        raw_x = INPUT_TOUCH_RAW_WIDTH - 1;
+    }
+    if (raw_y >= INPUT_TOUCH_RAW_HEIGHT) {
+        raw_y = INPUT_TOUCH_RAW_HEIGHT - 1;
+    }
+
+    memset(event, 0, sizeof(*event));
+    event->type = type;
+    event->touch.x = raw_y;
+    event->touch.y = (INPUT_TOUCH_RAW_WIDTH - 1) - raw_x;
+    event->touch.raw = *touch;
+}
+
 static bool input_pop_touch_change(input_event_t* event) {
     gt911_touch_t touch;
     if (gt911_get_touch(&touch) != ESP_OK) {
@@ -84,9 +104,7 @@ static bool input_pop_touch_change(input_event_t* event) {
         if (!input_touch_release_resolved(&touch)) {
             if (touch.touched && !input_touch_same_state(&touch, &s_last_touch)) {
                 s_last_touch = touch;
-                memset(event, 0, sizeof(*event));
-                event->type = INPUT_EVENT_TOUCH_MOVE;
-                event->touch = touch;
+                input_set_touch_event(event, INPUT_EVENT_TOUCH_MOVE, &touch);
                 return true;
             }
             return false;
@@ -97,15 +115,17 @@ static bool input_pop_touch_change(input_event_t* event) {
         return false;
     }
 
-    const bool was_touched = s_last_touch.touched;
+    const gt911_touch_t previous_touch = s_last_touch;
+    const bool was_touched = previous_touch.touched;
     s_last_touch = touch;
-    memset(event, 0, sizeof(*event));
     if (touch.touched) {
-        event->type = was_touched ? INPUT_EVENT_TOUCH_MOVE : INPUT_EVENT_TOUCH_PRESS;
+        input_set_touch_event(event, was_touched ? INPUT_EVENT_TOUCH_MOVE : INPUT_EVENT_TOUCH_PRESS, &touch);
     } else {
-        event->type = INPUT_EVENT_TOUCH_RELEASE;
+        gt911_touch_t released_touch = previous_touch;
+        released_touch.touched = false;
+        released_touch.points = 0;
+        input_set_touch_event(event, INPUT_EVENT_TOUCH_RELEASE, &released_touch);
     }
-    event->touch = touch;
     return true;
 }
 

@@ -1,9 +1,9 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "display.h"
-#include "gt911.h"
 #include "input.h"
 #include "m5paper.h"
+#include "widget.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -13,8 +13,6 @@ static const uint16_t TEST_SPRITE_SCALE = 8;
 static const uint32_t BATTERY_TEXT_PERIOD_FRAMES = 5;
 static const uint32_t INPUT_TIMEOUT_MS = 2000;
 static const uint16_t TOUCH_MARKER_RADIUS = 12;
-static const uint16_t M5PAPER_TOUCH_RAW_WIDTH = 540;
-static const uint16_t M5PAPER_TOUCH_RAW_HEIGHT = 960;
 #define TOUCH_MARKER_CAPACITY 128
 
 typedef struct demo_box_s {
@@ -27,6 +25,10 @@ typedef struct demo_box_s {
 } demo_sprite_t;
 
 static display_pixmap_t s_test_sprite;
+static demo_sprite_t s_sprite;
+static uint32_t s_frame;
+static widget_window_t s_root_window;
+static widget_window_t s_touch_window;
 
 typedef struct touch_marker_s {
     uint16_t x;
@@ -138,28 +140,6 @@ static void reset_sprite(demo_sprite_t* sprite) {
     };
 }
 
-static void redraw_demo_scene(const demo_sprite_t* sprite) {
-    render_static_demo();
-    draw_sprite(sprite);
-    draw_touch_markers();
-    display_update();
-}
-
-static void scale_touch_to_display(const gt911_touch_t* touch, uint16_t* x, uint16_t* y) {
-    uint32_t raw_x = touch->x;
-    uint32_t raw_y = touch->y;
-
-    if (raw_x >= M5PAPER_TOUCH_RAW_WIDTH) {
-        raw_x = M5PAPER_TOUCH_RAW_WIDTH - 1;
-    }
-    if (raw_y >= M5PAPER_TOUCH_RAW_HEIGHT) {
-        raw_y = M5PAPER_TOUCH_RAW_HEIGHT - 1;
-    }
-
-    *x = (uint16_t)raw_y;
-    *y = (uint16_t)((M5PAPER_TOUCH_RAW_WIDTH - 1) - raw_x);
-}
-
 static void step_sprite(demo_sprite_t* sprite) {
     const int min_x = (int)(display_width() / 2) + 24;
     const int max_x = (int)display_width() - sprite->w - 24;
@@ -213,24 +193,101 @@ static const char* input_button_name(input_button_t button) {
     }
 }
 
+static void demo_root_draw(widget_window_t* window) {
+    (void)window;
+    render_static_demo();
+    draw_sprite(&s_sprite);
+}
+
+static bool demo_root_event(widget_window_t* window, const input_event_t* event) {
+    if (event->type == INPUT_EVENT_DIRECTIONAL_BUTTON) {
+        ESP_LOGI(TAG, "Button %s %s mask=0x%02x",
+                 input_button_name(event->button.button),
+                 event->button.pressed ? "pressed" : "released",
+                 event->button.pressed_mask);
+        if (event->button.button == INPUT_BUTTON_CENTER && event->button.pressed) {
+            s_touch_marker_count = 0;
+            s_frame = 0;
+            reset_sprite(&s_sprite);
+            widget_draw(window);
+            display_update();
+        }
+        return true;
+    }
+
+    if (event->type != INPUT_EVENT_TIMEOUT) {
+        return false;
+    }
+
+    float battery_voltage = 0.0f;
+    const bool battery_ok = m5paper_battery_voltage(&battery_voltage);
+    if (battery_ok) {
+        ESP_LOGI(TAG, "Battery voltage: %.3f V", battery_voltage);
+    } else {
+        ESP_LOGW(TAG, "Battery voltage read failed");
+    }
+
+    if ((s_frame % BATTERY_TEXT_PERIOD_FRAMES) == 0 && battery_ok) {
+        draw_battery_text(battery_voltage);
+    }
+    update_sprite_frame(s_frame++, &s_sprite);
+    return true;
+}
+
+static void demo_touch_draw(widget_window_t* window) {
+    (void)window;
+    draw_touch_markers();
+}
+
+static bool demo_touch_event(widget_window_t* window, const input_event_t* event) {
+    (void)window;
+    if (event->type == INPUT_EVENT_TOUCH_RELEASE) {
+        ESP_LOGI(TAG, "Touch release display=(%u,%u)", event->touch.x, event->touch.y);
+        return true;
+    }
+    if (event->type != INPUT_EVENT_TOUCH_PRESS && event->type != INPUT_EVENT_TOUCH_MOVE) {
+        return false;
+    }
+
+    append_touch_marker(event->touch.x, event->touch.y);
+    draw_touch_marker(event->touch.x, event->touch.y);
+    display_update();
+    ESP_LOGI(TAG, "Touch %s raw=(%u,%u) display=(%u,%u) size=%u points=%u",
+             event->type == INPUT_EVENT_TOUCH_PRESS ? "press" : "move",
+             event->touch.raw.x, event->touch.raw.y,
+             event->touch.x, event->touch.y,
+             event->touch.raw.size, event->touch.raw.points);
+    return true;
+}
+
+static const widget_class_t s_demo_root_class = {
+    .draw = demo_root_draw,
+    .event = demo_root_event,
+};
+
+static const widget_class_t s_demo_touch_class = {
+    .draw = demo_touch_draw,
+    .event = demo_touch_event,
+};
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "hello world");
 
     m5paper_init();
-    const esp_err_t touch_err = gt911_init();
-    if (touch_err != ESP_OK) {
-        ESP_LOGW(TAG, "GT911 init failed: %s", esp_err_to_name(touch_err));
-    }
     display_init(2300);
     if (!display_pixmap_from_xbm3(&s_test_sprite, s_test_pixmap)) {
         ESP_LOGE(TAG, "Failed to decode test pixmap");
         return;
     }
-    uint32_t frame = 0;
-    demo_sprite_t sprite;
-    reset_sprite(&sprite);
-    redraw_demo_scene(&sprite);
+    reset_sprite(&s_sprite);
+    widget_window_init(&s_root_window, &s_demo_root_class,
+                       (widget_rect_t){0, 0, display_width(), display_height()}, NULL);
+    widget_window_init(&s_touch_window, &s_demo_touch_class,
+                       (widget_rect_t){0, 0, display_width(), display_height()}, NULL);
+    widget_window_add_child(&s_root_window, &s_touch_window);
+    widget_draw(&s_root_window);
+    display_update();
 
     const esp_err_t input_err = input_init();
     if (input_err != ESP_OK) {
@@ -246,62 +303,7 @@ void app_main(void)
             continue;
         }
 
-        if (event.type == INPUT_EVENT_TOUCH_PRESS) {
-            uint16_t x;
-            uint16_t y;
-            scale_touch_to_display(&event.touch, &x, &y);
-            append_touch_marker(x, y);
-            draw_touch_marker(x, y);
-            display_update();
-            ESP_LOGI(TAG, "Touch press raw=(%u,%u) display=(%u,%u) size=%u points=%u",
-                     event.touch.x, event.touch.y, x, y, event.touch.size, event.touch.points);
-            continue;
-        }
-
-        if (event.type == INPUT_EVENT_TOUCH_MOVE) {
-            uint16_t x;
-            uint16_t y;
-            scale_touch_to_display(&event.touch, &x, &y);
-            append_touch_marker(x, y);
-            draw_touch_marker(x, y);
-            display_update();
-            ESP_LOGI(TAG, "Touch move raw=(%u,%u) display=(%u,%u) size=%u points=%u",
-                     event.touch.x, event.touch.y, x, y, event.touch.size, event.touch.points);
-            continue;
-        }
-
-        if (event.type == INPUT_EVENT_TOUCH_RELEASE) {
-            ESP_LOGI(TAG, "Touch release");
-            continue;
-        }
-
-        if (event.type == INPUT_EVENT_DIRECTIONAL_BUTTON) {
-            ESP_LOGI(TAG, "Button %s %s mask=0x%02x",
-                     input_button_name(event.button.button),
-                     event.button.pressed ? "pressed" : "released",
-                     event.button.pressed_mask);
-            if (event.button.button == INPUT_BUTTON_CENTER && event.button.pressed) {
-                s_touch_marker_count = 0;
-                frame = 0;
-                reset_sprite(&sprite);
-                redraw_demo_scene(&sprite);
-            }
-            continue;
-        }
-
-        float battery_voltage = 0.0f;
-        const bool battery_ok = m5paper_battery_voltage(&battery_voltage);
-        if (battery_ok) {
-            ESP_LOGI(TAG, "Battery voltage: %.3f V", battery_voltage);
-        } else {
-            ESP_LOGW(TAG, "Battery voltage read failed");
-        }
-
-        if ((frame % BATTERY_TEXT_PERIOD_FRAMES) == 0 && battery_ok) {
-            draw_battery_text(battery_voltage);
-        }
-
-        update_sprite_frame(frame++, &sprite);
+        widget_dispatch_event(&s_root_window, &event);
     }   
 
 }
