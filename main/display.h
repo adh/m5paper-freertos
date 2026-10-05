@@ -24,6 +24,18 @@ typedef enum display_rotation_e {
     DISPLAY_ROTATE_270 = 3,
 } display_rotation_t;
 
+typedef enum display_update_mode_e {
+    /* Fast-mode gray support depends on the controller's installed LUT. */
+    DISPLAY_UPDATE_MODE_DU = 1,
+    DISPLAY_UPDATE_MODE_GC16 = 2,
+    DISPLAY_UPDATE_MODE_GL16 = 3,
+    DISPLAY_UPDATE_MODE_GLR16 = 4,
+    DISPLAY_UPDATE_MODE_GLD16 = 5,
+    DISPLAY_UPDATE_MODE_FAST = 6,
+    DISPLAY_UPDATE_MODE_DU4 = DISPLAY_UPDATE_MODE_FAST,
+    DISPLAY_UPDATE_MODE_A2 = 7,
+} display_update_mode_t;
+
 void display_init(uint16_t vcomm);
 uint16_t display_width(void);
 uint16_t display_height(void);
@@ -45,6 +57,9 @@ uint16_t display_xpm3_height(const char* const* xpm);
 void display_xpm3_draw(int x, int y, const char* const* xpm);
 void display_xpm3_draw_scaled(int x, int y, const char* const* xpm, uint16_t scale);
 bool display_damaged(display_rect_t* rect);
+/* High-quality 16-gray update. */
 bool display_update(void);
+/* Fast modes periodically fall back to GC16 to clean their accumulated area. */
+bool display_update_with_mode(display_update_mode_t mode);
 
 #endif

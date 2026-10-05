@@ -45,7 +45,6 @@ static const char* TAG = "it8951";
 #define IT8951_TCON_LD_IMG_END 0x0022
 
 // I80 User defined command code
-#define USDEF_I80_CMD_DPY_AREA 0x0034
 #define USDEF_I80_CMD_GET_DEV_INFO 0x0302
 #define USDEF_I80_CMD_DPY_BUF_AREA 0x0037
 #define USDEF_I80_CMD_VCOM 0x0039
@@ -53,9 +52,7 @@ static const char* TAG = "it8951";
 #define IT8951_ENDIAN_LITTLE 0
 #define IT8951_ENDIAN_BIG 1
 #define IT8951_PANEL_ROTATION IT8951_ROTATE_0
-#define IT8951_MODE_INIT 0
-#define IT8951_MODE_DU 1
-#define IT8951_MODE_GC16 2
+#define IT8951_LUT_POLL_INTERVAL_MS 5
 
 // Register Base Address
 #define DISPLAY_REG_BASE 0x1000  // Register RW access
@@ -461,23 +458,25 @@ uint32_t it8951_get_vram_base(){
     return device_info.memory_address_low | (device_info.memory_address_heigh << 16);
 }
 
-static void log_upload_stats(const it8951_area_t* area, int64_t upload_start_us, int64_t update_start_us) {
+static void log_upload_stats(const it8951_area_t* area, it8951_update_mode_t mode,
+                             int64_t upload_start_us, int64_t update_start_us) {
     const uint32_t pixels = (uint32_t)area->w * area->h;
     const int64_t upload_time_us = update_start_us - upload_start_us;
     const int64_t update_time_us = esp_timer_get_time() - update_start_us;
 
     ESP_LOGI(TAG,
-             "Upload area x=%u y=%u w=%u h=%u pixels=%" PRIu32 " upload=%.2f ms update=%.2f ms",
+             "Upload area x=%u y=%u w=%u h=%u mode=%u pixels=%" PRIu32 " upload=%.2f ms update=%.2f ms",
              area->x,
              area->y,
              area->w,
              area->h,
+             (unsigned int)mode,
              pixels,
              (double)upload_time_us / 1000.0,
              (double)update_time_us / 1000.0);
 }
 
-static void upload_area_solid(const it8951_area_t* area, uint8_t gray, int mode) {
+static void upload_area_solid(const it8951_area_t* area, uint8_t gray, it8951_update_mode_t mode) {
     size_t remaining = (size_t)area->w * area->h;
     const int64_t upload_start_us = esp_timer_get_time();
 
@@ -495,10 +494,11 @@ static void upload_area_solid(const it8951_area_t* area, uint8_t gray, int mode)
     const int64_t update_start_us = esp_timer_get_time();
     it8951_update_area((it8951_area_t*)area, mode);
     it8951_wait_display_ready();
-    log_upload_stats(area, upload_start_us, update_start_us);
+    log_upload_stats(area, mode, upload_start_us, update_start_us);
 }
 
-static void upload_area_8bpp(const it8951_area_t* area, const uint8_t* pixels, int mode) {
+static void upload_area_8bpp(const it8951_area_t* area, const uint8_t* pixels,
+                              it8951_update_mode_t mode) {
     size_t remaining = (size_t)area->w * area->h;
     const int64_t upload_start_us = esp_timer_get_time();
 
@@ -519,10 +519,11 @@ static void upload_area_8bpp(const it8951_area_t* area, const uint8_t* pixels, i
     const int64_t update_start_us = esp_timer_get_time();
     it8951_update_area((it8951_area_t*)area, mode);
     it8951_wait_display_ready();
-    log_upload_stats(area, upload_start_us, update_start_us);
+    log_upload_stats(area, mode, upload_start_us, update_start_us);
 }
 
-static void upload_area_8bpp_stride(const it8951_area_t* area, const uint8_t* pixels, uint16_t stride, int mode) {
+static void upload_area_8bpp_stride(const it8951_area_t* area, const uint8_t* pixels,
+                                    uint16_t stride, it8951_update_mode_t mode) {
     ESP_ERROR_ASSERT(pixels);
     ESP_ERROR_ASSERT(stride >= area->w);
     const int64_t upload_start_us = esp_timer_get_time();
@@ -547,7 +548,7 @@ static void upload_area_8bpp_stride(const it8951_area_t* area, const uint8_t* pi
     const int64_t update_start_us = esp_timer_get_time();
     it8951_update_area((it8951_area_t*)area, mode);
     it8951_wait_display_ready();
-    log_upload_stats(area, upload_start_us, update_start_us);
+    log_upload_stats(area, mode, upload_start_us, update_start_us);
 }
 
 void it8951_clear_screen(){
@@ -558,16 +559,20 @@ void it8951_clear_screen(){
         .h = device_info.height
     };
 
-    upload_area_solid(&area, 0xFF, IT8951_MODE_INIT);
+    upload_area_solid(&area, 0xFF, IT8951_UPDATE_MODE_INIT);
 }
 
-void it8951_update_area(it8951_area_t* area, int mode){
-    write_command(USDEF_I80_CMD_DPY_AREA);
+void it8951_update_area(it8951_area_t* area, it8951_update_mode_t mode){
+    const uint32_t image_buffer_address = it8951_get_vram_base();
+
+    write_command(USDEF_I80_CMD_DPY_BUF_AREA);
     write_data_word(area->x);
     write_data_word(area->y);
     write_data_word(area->w);
     write_data_word(area->h);
     write_data_word((uint16_t)mode);
+    write_data_word((uint16_t)image_buffer_address);
+    write_data_word((uint16_t)(image_buffer_address >> 16));
 }
 
 void it8951_wait_display_ready(){
@@ -582,7 +587,7 @@ void it8951_wait_display_ready(){
             ESP_LOGE(TAG, "Controller is busy for longer than 5s");
             esp_restart();
         }
-        delay(20);
+        delay(IT8951_LUT_POLL_INTERVAL_MS);
     }
 }
 
@@ -609,7 +614,7 @@ void it8951_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t gr
     };
 
     normalize_area_even_width(&area);
-    upload_area_solid(&area, gray, IT8951_MODE_GC16);
+    upload_area_solid(&area, gray, IT8951_UPDATE_MODE_GC16);
 }
 
 void it8951_blit_8bpp(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* pixels) {
@@ -635,10 +640,16 @@ void it8951_blit_8bpp(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint
     };
 
     normalize_area_even_width(&area);
-    upload_area_8bpp(&area, pixels, IT8951_MODE_GC16);
+    upload_area_8bpp(&area, pixels, IT8951_UPDATE_MODE_GC16);
 }
 
 void it8951_blit_8bpp_stride(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* pixels, uint16_t stride) {
+    it8951_blit_8bpp_stride_mode(x, y, w, h, pixels, stride, IT8951_UPDATE_MODE_GC16);
+}
+
+void it8951_blit_8bpp_stride_mode(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                                  const uint8_t* pixels, uint16_t stride,
+                                  it8951_update_mode_t mode) {
     ESP_ERROR_ASSERT(x < device_info.width);
     ESP_ERROR_ASSERT(y < device_info.height);
 
@@ -661,7 +672,7 @@ void it8951_blit_8bpp_stride(uint16_t x, uint16_t y, uint16_t w, uint16_t h, con
     };
 
     normalize_area_even_width(&area);
-    upload_area_8bpp_stride(&area, pixels, stride, IT8951_MODE_GC16);
+    upload_area_8bpp_stride(&area, pixels, stride, mode);
 }
 
 void it8951_init(uint16_t vcomm){

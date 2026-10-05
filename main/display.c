@@ -24,6 +24,10 @@ static uint8_t* s_framebuffer;
 static uint16_t s_width;
 static uint16_t s_height;
 static damage_state_t s_damage;
+static damage_state_t s_fast_damage;
+static uint16_t s_fast_update_count;
+
+#define DISPLAY_FAST_UPDATE_CLEANUP_INTERVAL 32
 
 typedef struct xpm3_header_s {
     int width;
@@ -252,7 +256,7 @@ static bool clip_rect(int* x, int* y, int* w, int* h) {
     return *w > 0 && *h > 0;
 }
 
-static void mark_damage(int x, int y, int w, int h) {
+static void damage_include(damage_state_t* damage, int x, int y, int w, int h) {
     if (!clip_rect(&x, &y, &w, &h)) {
         return;
     }
@@ -260,27 +264,31 @@ static void mark_damage(int x, int y, int w, int h) {
     const uint16_t x1 = (uint16_t)(x + w - 1);
     const uint16_t y1 = (uint16_t)(y + h - 1);
 
-    if (!s_damage.dirty) {
-        s_damage.dirty = true;
-        s_damage.x0 = (uint16_t)x;
-        s_damage.y0 = (uint16_t)y;
-        s_damage.x1 = x1;
-        s_damage.y1 = y1;
+    if (!damage->dirty) {
+        damage->dirty = true;
+        damage->x0 = (uint16_t)x;
+        damage->y0 = (uint16_t)y;
+        damage->x1 = x1;
+        damage->y1 = y1;
         return;
     }
 
-    if (x < s_damage.x0) {
-        s_damage.x0 = (uint16_t)x;
+    if (x < damage->x0) {
+        damage->x0 = (uint16_t)x;
     }
-    if (y < s_damage.y0) {
-        s_damage.y0 = (uint16_t)y;
+    if (y < damage->y0) {
+        damage->y0 = (uint16_t)y;
     }
-    if (x1 > s_damage.x1) {
-        s_damage.x1 = x1;
+    if (x1 > damage->x1) {
+        damage->x1 = x1;
     }
-    if (y1 > s_damage.y1) {
-        s_damage.y1 = y1;
+    if (y1 > damage->y1) {
+        damage->y1 = y1;
     }
+}
+
+static void mark_damage(int x, int y, int w, int h) {
+    damage_include(&s_damage, x, y, w, h);
 }
 
 static void set_pixel_unchecked(int x, int y, uint8_t gray) {
@@ -360,6 +368,8 @@ void display_init(uint16_t vcomm) {
     s_framebuffer = it8951_framebuffer();
     memset(s_framebuffer, 0xFF, (size_t)s_width * s_height);
     s_damage.dirty = false;
+    s_fast_damage.dirty = false;
+    s_fast_update_count = 0;
 }
 
 uint16_t display_width(void) {
@@ -776,7 +786,53 @@ static void normalize_update_rect(display_rect_t* rect) {
 }
 
 bool display_update(void) {
+    return display_update_with_mode(DISPLAY_UPDATE_MODE_GC16);
+}
+
+static bool display_update_mode_is_fast(display_update_mode_t mode) {
+    return mode == DISPLAY_UPDATE_MODE_DU ||
+           mode == DISPLAY_UPDATE_MODE_DU4 ||
+           mode == DISPLAY_UPDATE_MODE_A2;
+}
+
+static bool display_update_mode_is_valid(display_update_mode_t mode) {
+    return mode >= DISPLAY_UPDATE_MODE_DU && mode <= DISPLAY_UPDATE_MODE_A2;
+}
+
+static void display_rect_include_damage(display_rect_t* rect, const damage_state_t* damage) {
+    if (!rect || !damage || !damage->dirty) {
+        return;
+    }
+
+    const uint16_t x0 = rect->x < damage->x0 ? rect->x : damage->x0;
+    const uint16_t y0 = rect->y < damage->y0 ? rect->y : damage->y0;
+    const uint16_t rect_x1 = rect->x + rect->w - 1;
+    const uint16_t rect_y1 = rect->y + rect->h - 1;
+    const uint16_t x1 = rect_x1 > damage->x1 ? rect_x1 : damage->x1;
+    const uint16_t y1 = rect_y1 > damage->y1 ? rect_y1 : damage->y1;
+
+    rect->x = x0;
+    rect->y = y0;
+    rect->w = x1 - x0 + 1;
+    rect->h = y1 - y0 + 1;
+}
+
+static bool display_rect_contains_damage(const display_rect_t* rect, const damage_state_t* damage) {
+    if (!damage->dirty) {
+        return true;
+    }
+    return rect->x <= damage->x0 && rect->y <= damage->y0 &&
+           (uint32_t)rect->x + rect->w > damage->x1 &&
+           (uint32_t)rect->y + rect->h > damage->y1;
+}
+
+bool display_update_with_mode(display_update_mode_t mode) {
     display_rect_t rect;
+
+    if (!display_update_mode_is_valid(mode)) {
+        ESP_LOGE(TAG, "Invalid update mode: %d", (int)mode);
+        return false;
+    }
 
     if (!display_damaged(&rect)) {
         ESP_LOGI(TAG, "No damage to update");
@@ -784,8 +840,30 @@ bool display_update(void) {
     }
 
     normalize_update_rect(&rect);
-    ESP_LOGI(TAG, "Update damaged region x=%u y=%u w=%u h=%u", rect.x, rect.y, rect.w, rect.h);
-    it8951_blit_8bpp_stride(rect.x, rect.y, rect.w, rect.h, s_framebuffer + ((size_t)rect.y * s_width + rect.x), s_width);
+    display_update_mode_t actual_mode = mode;
+    if (display_update_mode_is_fast(mode) &&
+        s_fast_update_count + 1 >= DISPLAY_FAST_UPDATE_CLEANUP_INTERVAL) {
+        actual_mode = DISPLAY_UPDATE_MODE_GC16;
+        display_rect_include_damage(&rect, &s_fast_damage);
+        normalize_update_rect(&rect);
+        ESP_LOGI(TAG, "Periodic GC16 cleanup after %u fast updates", s_fast_update_count);
+    }
+
+    ESP_LOGI(TAG, "Update damaged region x=%u y=%u w=%u h=%u mode=%u",
+             rect.x, rect.y, rect.w, rect.h, (unsigned int)actual_mode);
+    it8951_blit_8bpp_stride_mode(
+        rect.x, rect.y, rect.w, rect.h,
+        s_framebuffer + ((size_t)rect.y * s_width + rect.x), s_width,
+        (it8951_update_mode_t)actual_mode);
+
+    if (display_update_mode_is_fast(actual_mode)) {
+        ++s_fast_update_count;
+        damage_include(&s_fast_damage, rect.x, rect.y, rect.w, rect.h);
+    } else if (actual_mode == DISPLAY_UPDATE_MODE_GC16 &&
+               display_rect_contains_damage(&rect, &s_fast_damage)) {
+        s_fast_update_count = 0;
+        s_fast_damage.dirty = false;
+    }
     s_damage.dirty = false;
     return true;
 }

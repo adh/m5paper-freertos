@@ -15,6 +15,17 @@
 #define IT8951_4BPP 2
 #define IT8951_8BPP 3
 
+typedef enum it8951_update_mode_e {
+    IT8951_UPDATE_MODE_INIT = 0,
+    IT8951_UPDATE_MODE_DU = 1,
+    IT8951_UPDATE_MODE_GC16 = 2,
+    IT8951_UPDATE_MODE_GL16 = 3,
+    IT8951_UPDATE_MODE_GLR16 = 4,
+    IT8951_UPDATE_MODE_GLD16 = 5,
+    IT8951_UPDATE_MODE_DU4 = 6,
+    IT8951_UPDATE_MODE_A2 = 7,
+} it8951_update_mode_t;
+
 typedef struct it8951_device_info_s {
     uint16_t width;
     uint16_t height;
@@ -40,7 +51,10 @@ void it8951_clear_screen(void);
 void it8951_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t gray);
 void it8951_blit_8bpp(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* pixels);
 void it8951_blit_8bpp_stride(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t* pixels, uint16_t stride);
-void it8951_update_area(it8951_area_t* area, int mode);
+void it8951_blit_8bpp_stride_mode(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                                  const uint8_t* pixels, uint16_t stride,
+                                  it8951_update_mode_t mode);
+void it8951_update_area(it8951_area_t* area, it8951_update_mode_t mode);
 void it8951_wait_display_ready(void);
 
 #endif

@@ -30,6 +30,43 @@ order. Each class draws into the existing display framebuffer; `display_update()
 remains under application control so a caller can batch several changes into a
 single e-paper refresh.
 
+### Button
+
+`main/widget_button.h` supplies a flat monochrome button class. It uses a white
+background with black text and a 2 px black border normally, then inverts those
+colors while captured touch input is inside its bounds. It calls `onclick` only
+when the gesture is released inside the button:
+
+```c
+widget_button_t save_button;
+widget_button_init(&save_button, (widget_rect_t){40, 80, 180, 64}, "SAVE",
+                   save_clicked, save_context);
+widget_window_add_child(&root_window, &save_button.window);
+```
+
+The background color, text color, border width, and text scale can be replaced with
+`widget_button_set_style()`. Button press-state transitions call
+`display_update_with_mode(DISPLAY_UPDATE_MODE_FAST)` immediately so the
+pressed-state inversion is visible. The installed M841 LUT only changes pure
+black and white reliably in this slot, so button colors are quantized to
+controller values `0x00` and `0xF0`. Ordinary tree drawing remains batchable
+by the application.
+
+## E-paper update modes
+
+`display_update()` remains the high-quality GC16 default.
+`display_update_with_mode()` also exposes the M5Paper waveform slots DU, GL16,
+GLR16, GLD16, FAST/DU4, and A2. Waveform contents depend on the installed LUT.
+On the detected M841 LUT, slot 6 is the fastest interactive mode and should
+only target black or white. `DISPLAY_UPDATE_MODE_DU4` remains an alias for
+`DISPLAY_UPDATE_MODE_FAST` to match the naming used by M5Stack's driver.
+
+Fast updates accumulate ghosting. The display layer remembers the union of
+regions changed by DU, DU4, and A2 and automatically refreshes that area with
+GC16 every 32 fast updates. Any GC16 update that covers the accumulated region
+also resets the cleanup counter. IT8951 timing logs include the selected mode,
+upload time, and panel update time.
+
 # Original ESP-IDF sample notes
 
 (See the README.md file in the upper level 'examples' directory for more information about examples.)

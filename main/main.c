@@ -4,6 +4,7 @@
 #include "input.h"
 #include "m5paper.h"
 #include "widget.h"
+#include "widget_button.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -29,6 +30,7 @@ static demo_sprite_t s_sprite;
 static uint32_t s_frame;
 static widget_window_t s_root_window;
 static widget_window_t s_touch_window;
+static widget_button_t s_reset_button;
 
 typedef struct touch_marker_s {
     uint16_t x;
@@ -199,18 +201,29 @@ static void demo_root_draw(widget_window_t* window) {
     draw_sprite(&s_sprite);
 }
 
+static void demo_reset(void) {
+    s_touch_marker_count = 0;
+    s_frame = 0;
+    reset_sprite(&s_sprite);
+    widget_draw(&s_root_window);
+    display_update();
+}
+
+static void demo_reset_clicked(widget_button_t* button, void* context) {
+    (void)button;
+    (void)context;
+    demo_reset();
+}
+
 static bool demo_root_event(widget_window_t* window, const input_event_t* event) {
+    (void)window;
     if (event->type == INPUT_EVENT_DIRECTIONAL_BUTTON) {
         ESP_LOGI(TAG, "Button %s %s mask=0x%02x",
                  input_button_name(event->button.button),
                  event->button.pressed ? "pressed" : "released",
                  event->button.pressed_mask);
         if (event->button.button == INPUT_BUTTON_CENTER && event->button.pressed) {
-            s_touch_marker_count = 0;
-            s_frame = 0;
-            reset_sprite(&s_sprite);
-            widget_draw(window);
-            display_update();
+            demo_reset();
         }
         return true;
     }
@@ -286,6 +299,9 @@ void app_main(void)
     widget_window_init(&s_touch_window, &s_demo_touch_class,
                        (widget_rect_t){0, 0, display_width(), display_height()}, NULL);
     widget_window_add_child(&s_root_window, &s_touch_window);
+    widget_button_init(&s_reset_button, (widget_rect_t){55, 330, 180, 64}, "RESET",
+                       demo_reset_clicked, NULL);
+    widget_window_add_child(&s_root_window, &s_reset_button.window);
     widget_draw(&s_root_window);
     display_update();
 
