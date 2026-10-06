@@ -11,6 +11,8 @@
 #include "it8951.h"
 #include "m5paper.h"
 #include "widget_button.h"
+#include "widget_checkbox.h"
+#include "widget_radio_button.h"
 
 static const char* TAG = "demo";
 
@@ -26,6 +28,7 @@ static const char* TAG = "demo";
 
 typedef enum demo_screen_id_e {
     DEMO_SCREEN_MENU = 0,
+    DEMO_SCREEN_WIDGETS,
     DEMO_SCREEN_PRIMITIVES,
     DEMO_SCREEN_TOUCH,
     DEMO_SCREEN_ANIMATION,
@@ -51,16 +54,20 @@ static widget_window_t* s_active_screen;
 static demo_screen_id_t s_active_screen_id;
 
 static widget_window_t s_menu_screen;
+static widget_window_t s_widgets_screen;
 static widget_window_t s_primitives_screen;
 static widget_window_t s_touch_screen;
 static widget_window_t s_touch_canvas;
 static widget_window_t s_animation_screen;
 static widget_window_t s_system_screen;
 
+static widget_button_t s_menu_widgets_button;
 static widget_button_t s_menu_primitives_button;
 static widget_button_t s_menu_touch_button;
 static widget_button_t s_menu_animation_button;
 static widget_button_t s_menu_system_button;
+static widget_button_t s_widgets_back_button;
+static widget_button_t s_widgets_reset_button;
 static widget_button_t s_primitives_back_button;
 static widget_button_t s_touch_back_button;
 static widget_button_t s_touch_clear_button;
@@ -68,6 +75,14 @@ static widget_button_t s_animation_back_button;
 static widget_button_t s_animation_reset_button;
 static widget_button_t s_system_back_button;
 static widget_button_t s_system_refresh_button;
+
+static widget_checkbox_t s_widgets_wifi_checkbox;
+static widget_checkbox_t s_widgets_notifications_checkbox;
+static widget_checkbox_t s_widgets_night_mode_checkbox;
+static widget_radio_group_t s_widgets_size_group;
+static widget_radio_button_t s_widgets_small_radio;
+static widget_radio_button_t s_widgets_medium_radio;
+static widget_radio_button_t s_widgets_large_radio;
 
 static display_pixmap_t s_sprite_pixmap;
 static demo_sprite_t s_sprite;
@@ -225,6 +240,15 @@ static void menu_draw(widget_window_t* window) {
                                   &font_swiss20, DISPLAY_ROTATE_0, 1, 0x00);
 }
 
+static void widgets_draw(widget_window_t* window) {
+    (void)window;
+    draw_page_background("UI widgets");
+    display_draw_string_with_font(40, 105, "Checkboxes", &font_swiss20b,
+                                  DISPLAY_ROTATE_0, 1, 0x00);
+    display_draw_string_with_font(510, 105, "Radio buttons", &font_swiss20b,
+                                  DISPLAY_ROTATE_0, 1, 0x00);
+}
+
 static void primitives_draw(widget_window_t* window) {
     (void)window;
     draw_page_background("Drawing primitives and fonts");
@@ -307,6 +331,7 @@ static bool app_event(widget_window_t* window, const input_event_t* event) {
 
 static const widget_class_t s_app_class = {.event = app_event};
 static const widget_class_t s_menu_class = {.draw = menu_draw};
+static const widget_class_t s_widgets_class = {.draw = widgets_draw};
 static const widget_class_t s_primitives_class = {.draw = primitives_draw};
 static const widget_class_t s_touch_class = {.draw = touch_draw};
 static const widget_class_t s_touch_canvas_class = {
@@ -318,6 +343,7 @@ static const widget_class_t s_system_class = {.draw = system_draw};
 
 static widget_window_t* screen_for_id(demo_screen_id_t screen_id) {
     switch (screen_id) {
+        case DEMO_SCREEN_WIDGETS: return &s_widgets_screen;
         case DEMO_SCREEN_PRIMITIVES: return &s_primitives_screen;
         case DEMO_SCREEN_TOUCH: return &s_touch_screen;
         case DEMO_SCREEN_ANIMATION: return &s_animation_screen;
@@ -370,6 +396,28 @@ static void system_refresh_clicked(widget_button_t* button, void* context) {
     display_update();
 }
 
+static void widgets_checkbox_changed(widget_checkbox_t* checkbox, bool checked,
+                                     void* context) {
+    (void)context;
+    ESP_LOGI(TAG, "Checkbox %s: %s", checkbox->label, checked ? "checked" : "unchecked");
+}
+
+static void widgets_radio_changed(widget_radio_button_t* button, void* context) {
+    (void)context;
+    ESP_LOGI(TAG, "Radio selection: %s", button->label);
+}
+
+static void widgets_reset_clicked(widget_button_t* button, void* context) {
+    (void)button;
+    (void)context;
+    widget_checkbox_set_checked(&s_widgets_wifi_checkbox, true);
+    widget_checkbox_set_checked(&s_widgets_notifications_checkbox, false);
+    widget_checkbox_set_checked(&s_widgets_night_mode_checkbox, false);
+    widget_radio_button_set_selected(&s_widgets_medium_radio, true);
+    widget_draw(&s_widgets_screen);
+    display_update();
+}
+
 static void init_button(widget_button_t* button, widget_window_t* parent, widget_rect_t frame,
                         const char* label, widget_button_onclick_t onclick, void* context) {
     widget_button_init(button, frame, label, onclick, context);
@@ -383,22 +431,41 @@ static void init_back_button(widget_button_t* button, widget_window_t* parent) {
                 "Back", back_button_clicked, NULL);
 }
 
+static void init_checkbox(widget_checkbox_t* checkbox, widget_window_t* parent,
+                          widget_rect_t frame, const char* label, bool checked) {
+    widget_checkbox_init(checkbox, frame, label, checked, widgets_checkbox_changed, NULL);
+    widget_window_add_child(parent, &checkbox->window);
+}
+
+static void init_radio_button(widget_radio_button_t* button, widget_window_t* parent,
+                              widget_rect_t frame, const char* label, bool selected) {
+    widget_radio_button_init(button, &s_widgets_size_group, frame, label, selected,
+                             widgets_radio_changed, NULL);
+    widget_window_add_child(parent, &button->window);
+}
+
 void demo_init(widget_window_t* root) {
     s_app_root = root;
     const widget_rect_t full_screen = {0, 0, display_width(), display_height()};
     widget_window_init(root, &s_app_class, full_screen, NULL);
     widget_window_init(&s_menu_screen, &s_menu_class, full_screen, NULL);
+    widget_window_init(&s_widgets_screen, &s_widgets_class, full_screen, NULL);
     widget_window_init(&s_primitives_screen, &s_primitives_class, full_screen, NULL);
     widget_window_init(&s_touch_screen, &s_touch_class, full_screen, NULL);
     widget_window_init(&s_animation_screen, &s_animation_class, full_screen, NULL);
     widget_window_init(&s_system_screen, &s_system_class, full_screen, NULL);
 
-    const int button_width = (display_width() - DEMO_MARGIN * 3) / 2;
-    init_button(&s_menu_primitives_button, &s_menu_screen,
+    const int button_width = (display_width() - DEMO_MARGIN * 4) / 3;
+    init_button(&s_menu_widgets_button, &s_menu_screen,
                 (widget_rect_t){DEMO_MARGIN, 155, button_width, DEMO_BUTTON_HEIGHT},
+                "UI widgets", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_WIDGETS);
+    init_button(&s_menu_primitives_button, &s_menu_screen,
+                (widget_rect_t){DEMO_MARGIN * 2 + button_width, 155,
+                                button_width, DEMO_BUTTON_HEIGHT},
                 "Primitives", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_PRIMITIVES);
     init_button(&s_menu_touch_button, &s_menu_screen,
-                (widget_rect_t){DEMO_MARGIN * 2 + button_width, 155, button_width, DEMO_BUTTON_HEIGHT},
+                (widget_rect_t){DEMO_MARGIN * 3 + button_width * 2, 155,
+                                button_width, DEMO_BUTTON_HEIGHT},
                 "Touch", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_TOUCH);
     init_button(&s_menu_animation_button, &s_menu_screen,
                 (widget_rect_t){DEMO_MARGIN, 285, button_width, DEMO_BUTTON_HEIGHT},
@@ -406,6 +473,24 @@ void demo_init(widget_window_t* root) {
     init_button(&s_menu_system_button, &s_menu_screen,
                 (widget_rect_t){DEMO_MARGIN * 2 + button_width, 285, button_width, DEMO_BUTTON_HEIGHT},
                 "System", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_SYSTEM);
+
+    init_back_button(&s_widgets_back_button, &s_widgets_screen);
+    init_checkbox(&s_widgets_wifi_checkbox, &s_widgets_screen,
+                  (widget_rect_t){40, 150, 380, 58}, "Wi-Fi", true);
+    init_checkbox(&s_widgets_notifications_checkbox, &s_widgets_screen,
+                  (widget_rect_t){40, 225, 380, 58}, "Notifications", false);
+    init_checkbox(&s_widgets_night_mode_checkbox, &s_widgets_screen,
+                  (widget_rect_t){40, 300, 380, 58}, "Night mode", false);
+    widget_radio_group_init(&s_widgets_size_group);
+    init_radio_button(&s_widgets_small_radio, &s_widgets_screen,
+                      (widget_rect_t){510, 150, 380, 58}, "Small", false);
+    init_radio_button(&s_widgets_medium_radio, &s_widgets_screen,
+                      (widget_rect_t){510, 225, 380, 58}, "Medium", true);
+    init_radio_button(&s_widgets_large_radio, &s_widgets_screen,
+                      (widget_rect_t){510, 300, 380, 58}, "Large", false);
+    init_button(&s_widgets_reset_button, &s_widgets_screen,
+                (widget_rect_t){330, 410, 300, 72},
+                "Reset controls", widgets_reset_clicked, NULL);
 
     init_back_button(&s_primitives_back_button, &s_primitives_screen);
 

@@ -5,6 +5,7 @@
 The application opens on a menu instead of combining every test on one screen.
 Its focused screens are:
 
+- **UI widgets** — buttons, independent checkboxes, and an exclusive radio group.
 - **Primitives** — grayscale shapes, lines, ellipses, and bundled fonts.
 - **Touch** — a finger-drawing surface using fast monochrome partial updates.
 - **Animation** — a moving pixmap demonstrating GC16 damage-region updates.
@@ -119,6 +120,44 @@ immediately so the pressed-state inversion is visible. The installed M841 LUT
 only changes pure black and white reliably in this slot, so button colors are
 quantized to controller values `0x00` and `0xF0`. Ordinary tree drawing remains
 batchable by the application.
+
+### Checkbox
+
+`main/widget_checkbox.h` supplies an independently toggled checkbox. Its whole
+window is the touch target, and `onchange` receives the new checked state after
+a successful release:
+
+```c
+widget_checkbox_t wifi_checkbox;
+widget_checkbox_init(&wifi_checkbox, (widget_rect_t){40, 80, 300, 58},
+                     "Wi-Fi", true, wifi_changed, context);
+widget_window_add_child(&root_window, &wifi_checkbox.window);
+```
+
+`widget_checkbox_set_checked()` changes the model without invoking the callback
+or refreshing the display, allowing callers to batch programmatic changes.
+
+### Radio button
+
+Radio buttons share a caller-owned `widget_radio_group_t`. The group points to
+the selected member, so selecting a new member automatically clears and redraws
+the previous selection:
+
+```c
+widget_radio_group_t size_group;
+widget_radio_button_t small_button;
+widget_radio_button_t large_button;
+
+widget_radio_group_init(&size_group);
+widget_radio_button_init(&small_button, &size_group,
+    (widget_rect_t){40, 80, 300, 58}, "Small", true, size_changed, context);
+widget_radio_button_init(&large_button, &size_group,
+    (widget_rect_t){40, 145, 300, 58}, "Large", false, size_changed, context);
+```
+
+Checkboxes and radio buttons use the same monochrome press inversion and fast
+partial refresh as ordinary buttons. Their style structures control colors,
+indicator size and border, label spacing, font, and text scale.
 
 ## E-paper update modes
 
