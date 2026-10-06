@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "fonts/fonts.h"
 
 static const char* TAG = "main";
 static const uint16_t TEST_SPRITE_SCALE = 8;
@@ -95,10 +96,14 @@ static void render_static_demo(void) {
     display_draw_roundrect(278, 42, 140, 86, 18, 5, 0x30);
     display_draw_ellipse(348, 176, 62, 36, 4, 0x70);
     display_draw_string(44, 224, "PRIMITIVES", DISPLAY_ROTATE_0, 2, 0x10);
+    display_draw_string_with_font(44, 256, "MeepMeep!", &font_eurex24i, DISPLAY_ROTATE_0, 2, 0x00);
+    display_draw_string_with_font(44, 297, "(define meep 1)", &font_bigfnt, DISPLAY_ROTATE_0, 1, 0x00);
     display_draw_string(430, 84, "M5PAPER", DISPLAY_ROTATE_90, 2, 0x20);
     display_draw_line(32, h - 180, split_x - 32, h - 180, 3, 0x10);
     display_draw_line(48, h - 72, split_x - 60, h - 220, 4, 0x70);
     display_draw_line(60, h - 220, split_x - 48, h - 72, 2, 0xA0);
+    display_draw_string_with_font(44, 472, "Hello, World!", &font_swiss20, DISPLAY_ROTATE_0, 1, 0x00);
+    display_draw_string_with_font(200, 472, "Hello, bold World!", &font_swiss20b, DISPLAY_ROTATE_0, 1, 0x00);
 }
 
 static void draw_sprite(const demo_sprite_t* sprite) {

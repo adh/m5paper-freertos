@@ -1,6 +1,7 @@
 #include "display.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -329,6 +330,55 @@ static void draw_glyph_pixel(int x, int y, int gx, int gy, display_rotation_t ro
     }
 }
 
+static const display_font_glyph_t* find_font_glyph(const display_font_t* font, uint8_t c) {
+    if (!font || !font->glyphs || !font->bitmap || font->glyph_count == 0) {
+        return NULL;
+    }
+
+    uint16_t code = c;
+    if (code < font->first_character || code >= font->first_character + font->glyph_count ||
+        !font->glyphs[code - font->first_character].exists) {
+        code = font->fallback_character;
+    }
+    if (code < font->first_character || code >= font->first_character + font->glyph_count) {
+        return NULL;
+    }
+
+    const display_font_glyph_t* glyph = &font->glyphs[code - font->first_character];
+    return glyph->exists ? glyph : NULL;
+}
+
+static void draw_font_glyph_pixel(int x, int y, int gx, int gy, int advance, int height,
+                                  display_rotation_t rotation, uint16_t scale, uint8_t gray) {
+    int rx = gx;
+    int ry = gy;
+
+    switch (rotation) {
+        case DISPLAY_ROTATE_0:
+            break;
+        case DISPLAY_ROTATE_90:
+            rx = height - 1 - gy;
+            ry = gx;
+            break;
+        case DISPLAY_ROTATE_180:
+            rx = advance - 1 - gx;
+            ry = height - 1 - gy;
+            break;
+        case DISPLAY_ROTATE_270:
+            rx = gy;
+            ry = advance - 1 - gx;
+            break;
+        default:
+            break;
+    }
+
+    for (uint16_t sy = 0; sy < scale; ++sy) {
+        for (uint16_t sx = 0; sx < scale; ++sx) {
+            set_pixel_unchecked(x + rx * (int)scale + sx, y + ry * (int)scale + sy, gray);
+        }
+    }
+}
+
 static bool point_in_roundrect_local(int px, int py, int w, int h, int radius) {
     if (w <= 0 || h <= 0) {
         return false;
@@ -537,7 +587,11 @@ void display_draw_character(int x, int y, char c, display_rotation_t rotation, u
         return;
     }
 
-    const unsigned char* glyph = font8x16[(unsigned char)c];
+    unsigned char code = (unsigned char)c;
+    if (code >= 128) {
+        code = '?';
+    }
+    const unsigned char* glyph = font8x16[code];
     for (int gy = 0; gy < 16; ++gy) {
         const unsigned char row = glyph[gy];
         for (int gx = 0; gx < 8; ++gx) {
@@ -553,6 +607,112 @@ void display_draw_character(int x, int y, char c, display_rotation_t rotation, u
         mark_damage(x, y, 8 * scale, 16 * scale);
     } else {
         mark_damage(x, y, 16 * scale, 8 * scale);
+    }
+}
+
+int display_measure_string(const display_font_t* font, const char* text, uint16_t scale) {
+    if (!font || !text || scale == 0) {
+        return 0;
+    }
+
+    size_t width = 0;
+    while (*text) {
+        const display_font_glyph_t* glyph = find_font_glyph(font, (uint8_t)*text++);
+        if (glyph) {
+            width += (size_t)glyph->advance * scale;
+            if (width > INT_MAX) {
+                return INT_MAX;
+            }
+        }
+    }
+    return (int)width;
+}
+
+void display_draw_character_with_font(int x, int y, uint8_t c, const display_font_t* font,
+                                      display_rotation_t rotation, uint16_t scale, uint8_t gray) {
+    if (!font || scale == 0) {
+        return;
+    }
+
+    const display_font_glyph_t* glyph = find_font_glyph(font, c);
+    if (!glyph || glyph->width == 0) {
+        return;
+    }
+
+    const int row_bytes = (glyph->width + 7) / 8;
+    const uint8_t* bitmap = font->bitmap + glyph->bitmap_offset;
+    for (int gy = 0; gy < font->height; ++gy) {
+        const uint8_t* row = bitmap + (size_t)gy * row_bytes;
+        for (int bitmap_x = 0; bitmap_x < glyph->width; ++bitmap_x) {
+            if ((row[bitmap_x / 8] & (0x80u >> (bitmap_x % 8))) == 0) {
+                continue;
+            }
+            draw_font_glyph_pixel(x, y, glyph->bearing + bitmap_x, gy, glyph->advance,
+                                  font->height, rotation, scale, gray);
+        }
+    }
+
+    int damage_x = x;
+    int damage_y = y;
+    int damage_w = glyph->width * scale;
+    int damage_h = font->height * scale;
+    switch (rotation) {
+        case DISPLAY_ROTATE_0:
+            damage_x += glyph->bearing * scale;
+            break;
+        case DISPLAY_ROTATE_90:
+            damage_y += glyph->bearing * scale;
+            damage_w = font->height * scale;
+            damage_h = glyph->width * scale;
+            break;
+        case DISPLAY_ROTATE_180:
+            damage_x += (glyph->advance - glyph->bearing - glyph->width) * scale;
+            break;
+        case DISPLAY_ROTATE_270:
+            damage_y += (glyph->advance - glyph->bearing - glyph->width) * scale;
+            damage_w = font->height * scale;
+            damage_h = glyph->width * scale;
+            break;
+        default:
+            break;
+    }
+    mark_damage(damage_x, damage_y, damage_w, damage_h);
+}
+
+void display_draw_string_with_font(int x, int y, const char* text, const display_font_t* font,
+                                   display_rotation_t rotation, uint16_t scale, uint8_t gray) {
+    if (!font || !text || scale == 0) {
+        return;
+    }
+
+    int cursor_x = x;
+    int cursor_y = y;
+    while (*text) {
+        const uint8_t code = (uint8_t)*text++;
+        const display_font_glyph_t* glyph = find_font_glyph(font, code);
+        if (!glyph) {
+            continue;
+        }
+
+        display_draw_character_with_font(cursor_x, cursor_y, code, font, rotation, scale, gray);
+        const int advance = glyph->advance * (int)scale;
+        switch (rotation) {
+            case DISPLAY_ROTATE_0:
+                cursor_x += advance;
+                break;
+            case DISPLAY_ROTATE_90:
+                cursor_y += advance;
+                break;
+            case DISPLAY_ROTATE_180:
+                cursor_x -= advance;
+                break;
+            case DISPLAY_ROTATE_270:
+                cursor_y -= advance;
+                break;
+            default:
+                cursor_x += advance;
+                break;
+        }
     }
 }
 

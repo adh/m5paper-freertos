@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "display_font.h"
+
 typedef struct display_rect_s {
     uint16_t x;
     uint16_t y;
@@ -48,6 +50,11 @@ void display_draw_line(int x0, int y0, int x1, int y1, uint16_t thickness, uint8
 void display_draw_ellipse(int cx, int cy, uint16_t rx, uint16_t ry, uint16_t thickness, uint8_t gray);
 void display_draw_character(int x, int y, char c, display_rotation_t rotation, uint16_t scale, uint8_t gray);
 void display_draw_string(int x, int y, const char* text, display_rotation_t rotation, uint16_t scale, uint8_t gray);
+int display_measure_string(const display_font_t* font, const char* text, uint16_t scale);
+void display_draw_character_with_font(int x, int y, uint8_t c, const display_font_t* font,
+                                      display_rotation_t rotation, uint16_t scale, uint8_t gray);
+void display_draw_string_with_font(int x, int y, const char* text, const display_font_t* font,
+                                   display_rotation_t rotation, uint16_t scale, uint8_t gray);
 void display_pixmap_free(display_pixmap_t* pixmap);
 bool display_pixmap_blit(int x, int y, const display_pixmap_t* pixmap, display_rotation_t rotation, uint16_t scale, int transparent_color);
 bool display_pixmap_from_xbm3(display_pixmap_t* pixmap, const char* const* xpm);
