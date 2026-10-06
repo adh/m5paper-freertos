@@ -42,6 +42,7 @@ and left bearing, including at all four display rotations:
 
 const char* label = "Proportional text";
 int width = display_measure_string(&font_swiss20, label, 1);
+int height = display_measure_string_height(&font_swiss20, 1);
 display_draw_string_with_font((display_width() - width) / 2, 40, label,
                               &font_swiss20, DISPLAY_ROTATE_0, 1, 0x00);
 ```
@@ -55,12 +56,13 @@ continue to use the fixed 8x16 font.
 Regenerate the C data after editing or adding a JSON font with:
 
 ```sh
-tools/font_json_to_c.py main/fonts/eurex24i.json main/fonts/swiss20.json \
-  main/fonts/swiss20b.json --header main/fonts/fonts.h --source main/fonts/fonts.c
+tools/font_json_to_c.py main/fonts/*.json \
+  --header main/fonts/fonts.h --source main/fonts/fonts.c
 ```
 
 Pass the same arguments with `--check` in CI to verify that the checked-in C
-files match their JSON sources.
+files match their JSON sources. The font-aware drawing and measurement APIs
+accept `NULL` as the font to select the legacy fixed 8x16 font.
 
 ### Button
 
@@ -76,13 +78,14 @@ widget_button_init(&save_button, (widget_rect_t){40, 80, 180, 64}, "SAVE",
 widget_window_add_child(&root_window, &save_button.window);
 ```
 
-The background color, text color, border width, and text scale can be replaced with
-`widget_button_set_style()`. Button press-state transitions call
-`display_update_with_mode(DISPLAY_UPDATE_MODE_FAST)` immediately so the
-pressed-state inversion is visible. The installed M841 LUT only changes pure
-black and white reliably in this slot, so button colors are quantized to
-controller values `0x00` and `0xF0`. Ordinary tree drawing remains batchable
-by the application.
+The background color, text color, border width, text scale, and optional
+proportional font can be replaced with `widget_button_set_style()`. Leave the
+style's `font` member as `NULL` to use the fixed 8x16 font. Button press-state
+transitions call `display_update_with_mode(DISPLAY_UPDATE_MODE_FAST)`
+immediately so the pressed-state inversion is visible. The installed M841 LUT
+only changes pure black and white reliably in this slot, so button colors are
+quantized to controller values `0x00` and `0xF0`. Ordinary tree drawing remains
+batchable by the application.
 
 ## E-paper update modes
 

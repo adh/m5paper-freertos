@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "display_font.h"
 #include "widget.h"
 
 typedef struct widget_button_s widget_button_t;
@@ -13,6 +14,7 @@ typedef struct widget_button_style_s {
     uint8_t text_color;
     uint16_t border_width;
     uint16_t text_scale;
+    const display_font_t* font;
 } widget_button_style_t;
 
 struct widget_button_s {

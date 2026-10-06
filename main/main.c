@@ -304,7 +304,7 @@ void app_main(void)
     widget_window_init(&s_touch_window, &s_demo_touch_class,
                        (widget_rect_t){0, 0, display_width(), display_height()}, NULL);
     widget_window_add_child(&s_root_window, &s_touch_window);
-    widget_button_init(&s_reset_button, (widget_rect_t){55, 330, 180, 64}, "RESET",
+    widget_button_init(&s_reset_button, (widget_rect_t){55, 330, 180, 64}, "Reset",
                        demo_reset_clicked, NULL);
     widget_window_add_child(&s_root_window, &s_reset_button.window);
     widget_draw(&s_root_window);

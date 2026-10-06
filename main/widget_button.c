@@ -1,15 +1,16 @@
 #include "widget_button.h"
 
 #include <stddef.h>
-#include <string.h>
 
 #include "display.h"
+#include "fonts/fonts.h"
 
 const widget_button_style_t WIDGET_BUTTON_DEFAULT_STYLE = {
     .background_color = 0xF0,
     .text_color = 0x00,
     .border_width = 4,
     .text_scale = 2,
+    .font = &font_hl14b,
 };
 
 static widget_button_t* widget_button_from_window(widget_window_t* window) {
@@ -49,25 +50,24 @@ static void widget_button_draw_class(widget_window_t* window) {
         return;
     }
 
-    const size_t label_length = strlen(button->label);
     const int available_width = frame.w - (border_width * 2);
     const int available_height = frame.h - (border_width * 2);
     uint16_t text_scale = button->style.text_scale;
     while (text_scale > 0 &&
-           (label_length * 8 * text_scale > (size_t)(available_width > 0 ? available_width : 0) ||
-            16 * text_scale > available_height)) {
+           (display_measure_string(button->style.font, button->label, text_scale) > available_width ||
+            display_measure_string_height(button->style.font, text_scale) > available_height)) {
         --text_scale;
     }
     if (text_scale == 0) {
         return;
     }
 
-    const int text_width = (int)(label_length * 8 * text_scale);
-    const int text_height = 16 * text_scale;
+    const int text_width = display_measure_string(button->style.font, button->label, text_scale);
+    const int text_height = display_measure_string_height(button->style.font, text_scale);
     const int text_x = frame.x + (frame.w - text_width) / 2;
     const int text_y = frame.y + (frame.h - text_height) / 2;
-    display_draw_string(text_x, text_y, button->label, DISPLAY_ROTATE_0,
-                        text_scale, text);
+    display_draw_string_with_font(text_x, text_y, button->label, button->style.font,
+                                  DISPLAY_ROTATE_0, text_scale, text);
 }
 
 static bool widget_button_event_class(widget_window_t* window, const input_event_t* event) {

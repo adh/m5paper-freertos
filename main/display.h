@@ -51,6 +51,7 @@ void display_draw_ellipse(int cx, int cy, uint16_t rx, uint16_t ry, uint16_t thi
 void display_draw_character(int x, int y, char c, display_rotation_t rotation, uint16_t scale, uint8_t gray);
 void display_draw_string(int x, int y, const char* text, display_rotation_t rotation, uint16_t scale, uint8_t gray);
 int display_measure_string(const display_font_t* font, const char* text, uint16_t scale);
+int display_measure_string_height(const display_font_t* font, uint16_t scale);
 void display_draw_character_with_font(int x, int y, uint8_t c, const display_font_t* font,
                                       display_rotation_t rotation, uint16_t scale, uint8_t gray);
 void display_draw_string_with_font(int x, int y, const char* text, const display_font_t* font,

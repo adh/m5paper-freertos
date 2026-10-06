@@ -611,26 +611,41 @@ void display_draw_character(int x, int y, char c, display_rotation_t rotation, u
 }
 
 int display_measure_string(const display_font_t* font, const char* text, uint16_t scale) {
-    if (!font || !text || scale == 0) {
+    if (!text || scale == 0) {
         return 0;
     }
 
     size_t width = 0;
     while (*text) {
-        const display_font_glyph_t* glyph = find_font_glyph(font, (uint8_t)*text++);
-        if (glyph) {
-            width += (size_t)glyph->advance * scale;
-            if (width > INT_MAX) {
-                return INT_MAX;
-            }
+        const display_font_glyph_t* glyph = font
+            ? find_font_glyph(font, (uint8_t)*text)
+            : NULL;
+        if (!font || glyph) {
+            const int advance = font ? glyph->advance : 8;
+            width += (size_t)advance * scale;
         }
+        if (width > INT_MAX) {
+            return INT_MAX;
+        }
+        ++text;
     }
     return (int)width;
 }
 
+int display_measure_string_height(const display_font_t* font, uint16_t scale) {
+    if (scale == 0) {
+        return 0;
+    }
+    return (font ? font->height : 16) * (int)scale;
+}
+
 void display_draw_character_with_font(int x, int y, uint8_t c, const display_font_t* font,
                                       display_rotation_t rotation, uint16_t scale, uint8_t gray) {
-    if (!font || scale == 0) {
+    if (scale == 0) {
+        return;
+    }
+    if (!font) {
+        display_draw_character(x, y, (char)c, rotation, scale, gray);
         return;
     }
 
@@ -681,7 +696,11 @@ void display_draw_character_with_font(int x, int y, uint8_t c, const display_fon
 
 void display_draw_string_with_font(int x, int y, const char* text, const display_font_t* font,
                                    display_rotation_t rotation, uint16_t scale, uint8_t gray) {
-    if (!font || !text || scale == 0) {
+    if (!text || scale == 0) {
+        return;
+    }
+    if (!font) {
+        display_draw_string(x, y, text, rotation, scale, gray);
         return;
     }
 
