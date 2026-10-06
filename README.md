@@ -1,5 +1,19 @@
 # M5Paper FreeRTOS playground
 
+## Demo application
+
+The application opens on a menu instead of combining every test on one screen.
+Its focused screens are:
+
+- **Primitives** — grayscale shapes, lines, ellipses, and bundled fonts.
+- **Touch** — a finger-drawing surface using fast monochrome partial updates.
+- **Animation** — a moving pixmap demonstrating GC16 damage-region updates.
+- **System** — live battery voltage, display dimensions, and IT8951 firmware/LUT.
+
+Every demonstration has a touch Back button. Pressing the physical center
+button also returns directly to the menu. Static screens wait indefinitely for
+input, while Animation and System request their own event-loop timeouts.
+
 ## Widget tree
 
 `main/widget.h` provides an allocation-free window tree. Applications own the
@@ -52,6 +66,25 @@ available on `display_font_t` for line layout. Text is byte-oriented because
 the source fonts use 8-bit character slots; an absent slot is rendered as `?`.
 The original `display_draw_character()` and `display_draw_string()` functions
 continue to use the fixed 8x16 font.
+
+Related regular, bold, italic, and bold-italic faces are exposed as generated
+`display_font_family_t` values such as `font_family_swiss20`. Font-aware string
+drawing and measurement recognize a small ANSI SGR subset and select the
+corresponding face automatically:
+
+```c
+display_draw_string_with_font(24, 120,
+    "Status: " DISPLAY_FONT_BOLD_ON "bold" DISPLAY_FONT_BOLD_OFF ", "
+    DISPLAY_FONT_ITALIC_ON "italic" DISPLAY_FONT_STYLE_RESET,
+    &font_swiss20, DISPLAY_ROTATE_0, 1, 0x00);
+```
+
+Supported parameters are `0` (reset), `1`/`22` (bold on/off), and `3`/`23`
+(italic on/off); combined sequences such as `\x1b[1;3m` are accepted. When a
+family lacks the requested combined face, drawing falls back to the closest
+available face. Escape bytes do not contribute to `display_measure_string()`.
+The corresponding string-literal macros are declared in `display_font.h`,
+including `DISPLAY_FONT_BOLD_ITALIC_ON` for the combined form.
 
 Regenerate the C data after editing or adding a JSON font with:
 

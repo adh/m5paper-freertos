@@ -377,6 +377,14 @@ uint16_t it8951_height(void) {
     return device_info.height;
 }
 
+const char* it8951_firmware_version(void) {
+    return (const char*)device_info.firmware_version;
+}
+
+const char* it8951_lut_version(void) {
+    return (const char*)device_info.lut_version;
+}
+
 uint8_t* it8951_framebuffer(void) {
     ESP_ERROR_ASSERT(framebuffer);
     return framebuffer;

@@ -46,6 +46,8 @@ void it8951_init(uint16_t vcomm);
 void it8951_get_system_info(it8951_device_info_t *device_info);
 uint16_t it8951_width(void);
 uint16_t it8951_height(void);
+const char* it8951_firmware_version(void);
+const char* it8951_lut_version(void);
 uint8_t* it8951_framebuffer(void);
 void it8951_clear_screen(void);
 void it8951_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t gray);

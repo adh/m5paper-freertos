@@ -18,4 +18,10 @@ extern const display_font_t font_swiss20b;
 extern const display_font_t font_swiss20bi;
 extern const display_font_t font_swiss20i;
 
+extern const display_font_family_t font_family_bigfnt;
+extern const display_font_family_t font_family_eurex24i;
+extern const display_font_family_t font_family_hl14;
+extern const display_font_family_t font_family_jess14;
+extern const display_font_family_t font_family_swiss20;
+
 #endif

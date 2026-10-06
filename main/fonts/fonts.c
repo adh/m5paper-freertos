@@ -458,11 +458,13 @@ static const uint8_t bigfnt_bitmap[] = {
 const display_font_t font_bigfnt = {
     .glyphs = bigfnt_glyphs,
     .bitmap = bigfnt_bitmap,
+    .family = &font_family_bigfnt,
     .first_character = 0,
     .glyph_count = 128,
     .height = 20,
     .baseline = 16,
     .fallback_character = 63,
+    .style = 0,
 };
 
 static const display_font_glyph_t bigfntb_glyphs[] = {
@@ -922,11 +924,13 @@ static const uint8_t bigfntb_bitmap[] = {
 const display_font_t font_bigfntb = {
     .glyphs = bigfntb_glyphs,
     .bitmap = bigfntb_bitmap,
+    .family = &font_family_bigfnt,
     .first_character = 0,
     .glyph_count = 128,
     .height = 20,
     .baseline = 16,
     .fallback_character = 63,
+    .style = 1,
 };
 
 static const display_font_glyph_t bigfnti_glyphs[] = {
@@ -1353,11 +1357,13 @@ static const uint8_t bigfnti_bitmap[] = {
 const display_font_t font_bigfnti = {
     .glyphs = bigfnti_glyphs,
     .bitmap = bigfnti_bitmap,
+    .family = &font_family_bigfnt,
     .first_character = 0,
     .glyph_count = 128,
     .height = 20,
     .baseline = 16,
     .fallback_character = 63,
+    .style = 2,
 };
 
 static const display_font_glyph_t eurex24i_glyphs[] = {
@@ -1944,11 +1950,13 @@ static const uint8_t eurex24i_bitmap[] = {
 const display_font_t font_eurex24i = {
     .glyphs = eurex24i_glyphs,
     .bitmap = eurex24i_bitmap,
+    .family = &font_family_eurex24i,
     .first_character = 0,
     .glyph_count = 168,
     .height = 24,
     .baseline = 18,
     .fallback_character = 63,
+    .style = 0,
 };
 
 static const display_font_glyph_t hl14_glyphs[] = {
@@ -2234,11 +2242,13 @@ static const uint8_t hl14_bitmap[] = {
 const display_font_t font_hl14 = {
     .glyphs = hl14_glyphs,
     .bitmap = hl14_bitmap,
+    .family = &font_family_hl14,
     .first_character = 0,
     .glyph_count = 128,
     .height = 15,
     .baseline = 12,
     .fallback_character = 63,
+    .style = 0,
 };
 
 static const display_font_glyph_t hl14b_glyphs[] = {
@@ -2539,11 +2549,13 @@ static const uint8_t hl14b_bitmap[] = {
 const display_font_t font_hl14b = {
     .glyphs = hl14b_glyphs,
     .bitmap = hl14b_bitmap,
+    .family = &font_family_hl14,
     .first_character = 0,
     .glyph_count = 128,
     .height = 15,
     .baseline = 12,
     .fallback_character = 63,
+    .style = 1,
 };
 
 static const display_font_glyph_t jess14_glyphs[] = {
@@ -2799,11 +2811,13 @@ static const uint8_t jess14_bitmap[] = {
 const display_font_t font_jess14 = {
     .glyphs = jess14_glyphs,
     .bitmap = jess14_bitmap,
+    .family = &font_family_jess14,
     .first_character = 0,
     .glyph_count = 128,
     .height = 14,
     .baseline = 12,
     .fallback_character = 63,
+    .style = 0,
 };
 
 static const display_font_glyph_t jess14b_glyphs[] = {
@@ -3067,11 +3081,13 @@ static const uint8_t jess14b_bitmap[] = {
 const display_font_t font_jess14b = {
     .glyphs = jess14b_glyphs,
     .bitmap = jess14b_bitmap,
+    .family = &font_family_jess14,
     .first_character = 0,
     .glyph_count = 128,
     .height = 14,
     .baseline = 12,
     .fallback_character = 63,
+    .style = 1,
 };
 
 static const display_font_glyph_t jess14i_glyphs[] = {
@@ -3360,11 +3376,13 @@ static const uint8_t jess14i_bitmap[] = {
 const display_font_t font_jess14i = {
     .glyphs = jess14i_glyphs,
     .bitmap = jess14i_bitmap,
+    .family = &font_family_jess14,
     .first_character = 0,
     .glyph_count = 128,
     .height = 14,
     .baseline = 12,
     .fallback_character = 63,
+    .style = 2,
 };
 
 static const display_font_glyph_t swiss20_glyphs[] = {
@@ -3759,11 +3777,13 @@ static const uint8_t swiss20_bitmap[] = {
 const display_font_t font_swiss20 = {
     .glyphs = swiss20_glyphs,
     .bitmap = swiss20_bitmap,
+    .family = &font_family_swiss20,
     .first_character = 0,
     .glyph_count = 128,
     .height = 20,
     .baseline = 15,
     .fallback_character = 63,
+    .style = 0,
 };
 
 static const display_font_glyph_t swiss20b_glyphs[] = {
@@ -4197,11 +4217,13 @@ static const uint8_t swiss20b_bitmap[] = {
 const display_font_t font_swiss20b = {
     .glyphs = swiss20b_glyphs,
     .bitmap = swiss20b_bitmap,
+    .family = &font_family_swiss20,
     .first_character = 0,
     .glyph_count = 128,
     .height = 20,
     .baseline = 15,
     .fallback_character = 63,
+    .style = 1,
 };
 
 static const display_font_glyph_t swiss20bi_glyphs[] = {
@@ -4644,11 +4666,13 @@ static const uint8_t swiss20bi_bitmap[] = {
 const display_font_t font_swiss20bi = {
     .glyphs = swiss20bi_glyphs,
     .bitmap = swiss20bi_bitmap,
+    .family = &font_family_swiss20,
     .first_character = 0,
     .glyph_count = 128,
     .height = 20,
     .baseline = 15,
     .fallback_character = 63,
+    .style = 3,
 };
 
 static const display_font_glyph_t swiss20i_glyphs[] = {
@@ -5080,9 +5104,46 @@ static const uint8_t swiss20i_bitmap[] = {
 const display_font_t font_swiss20i = {
     .glyphs = swiss20i_glyphs,
     .bitmap = swiss20i_bitmap,
+    .family = &font_family_swiss20,
     .first_character = 0,
     .glyph_count = 128,
     .height = 20,
     .baseline = 15,
     .fallback_character = 63,
+    .style = 2,
+};
+
+const display_font_family_t font_family_bigfnt = {
+    .regular = &font_bigfnt,
+    .bold = &font_bigfntb,
+    .italic = &font_bigfnti,
+    .bold_italic = 0,
+};
+
+const display_font_family_t font_family_eurex24i = {
+    .regular = &font_eurex24i,
+    .bold = 0,
+    .italic = 0,
+    .bold_italic = 0,
+};
+
+const display_font_family_t font_family_hl14 = {
+    .regular = &font_hl14,
+    .bold = &font_hl14b,
+    .italic = 0,
+    .bold_italic = 0,
+};
+
+const display_font_family_t font_family_jess14 = {
+    .regular = &font_jess14,
+    .bold = &font_jess14b,
+    .italic = &font_jess14i,
+    .bold_italic = 0,
+};
+
+const display_font_family_t font_family_swiss20 = {
+    .regular = &font_swiss20,
+    .bold = &font_swiss20b,
+    .italic = &font_swiss20i,
+    .bold_italic = &font_swiss20bi,
 };

@@ -348,6 +348,92 @@ static const display_font_glyph_t* find_font_glyph(const display_font_t* font, u
     return glyph->exists ? glyph : NULL;
 }
 
+static const display_font_t* font_for_style(const display_font_t* font, uint8_t style) {
+    if (!font || !font->family) {
+        return font;
+    }
+
+    const display_font_family_t* family = font->family;
+    const display_font_t* selected = NULL;
+    switch (style & DISPLAY_FONT_STYLE_BOLD_ITALIC) {
+        case DISPLAY_FONT_STYLE_BOLD:
+            selected = family->bold;
+            break;
+        case DISPLAY_FONT_STYLE_ITALIC:
+            selected = family->italic;
+            break;
+        case DISPLAY_FONT_STYLE_BOLD_ITALIC:
+            selected = family->bold_italic;
+            if (!selected) {
+                selected = family->bold ? family->bold : family->italic;
+            }
+            break;
+        default:
+            selected = family->regular;
+            break;
+    }
+    return selected ? selected : family->regular;
+}
+
+static bool parse_font_style_escape(const char** text, uint8_t* style) {
+    const char* cursor = *text;
+    if ((uint8_t)cursor[0] != 0x1B || cursor[1] != '[') {
+        return false;
+    }
+
+    cursor += 2;
+    uint8_t next_style = *style;
+    if (*cursor == 'm') {
+        *style = DISPLAY_FONT_STYLE_REGULAR;
+        *text = cursor + 1;
+        return true;
+    }
+
+    while (*cursor) {
+        if (*cursor < '0' || *cursor > '9') {
+            return false;
+        }
+
+        int parameter = 0;
+        while (*cursor >= '0' && *cursor <= '9') {
+            if (parameter < 1000) {
+                parameter = parameter * 10 + (*cursor - '0');
+            }
+            ++cursor;
+        }
+
+        switch (parameter) {
+            case 0:
+                next_style = DISPLAY_FONT_STYLE_REGULAR;
+                break;
+            case 1:
+                next_style |= DISPLAY_FONT_STYLE_BOLD;
+                break;
+            case 3:
+                next_style |= DISPLAY_FONT_STYLE_ITALIC;
+                break;
+            case 22:
+                next_style &= (uint8_t)~DISPLAY_FONT_STYLE_BOLD;
+                break;
+            case 23:
+                next_style &= (uint8_t)~DISPLAY_FONT_STYLE_ITALIC;
+                break;
+            default:
+                break;
+        }
+
+        if (*cursor == 'm') {
+            *style = next_style;
+            *text = cursor + 1;
+            return true;
+        }
+        if (*cursor++ != ';') {
+            return false;
+        }
+    }
+    return false;
+}
+
 static void draw_font_glyph_pixel(int x, int y, int gx, int gy, int advance, int height,
                                   display_rotation_t rotation, uint16_t scale, uint8_t gray) {
     int rx = gx;
@@ -616,12 +702,21 @@ int display_measure_string(const display_font_t* font, const char* text, uint16_
     }
 
     size_t width = 0;
+    uint8_t style = font ? font->style : DISPLAY_FONT_STYLE_REGULAR;
+    const display_font_t* current_font = font;
     while (*text) {
-        const display_font_glyph_t* glyph = font
-            ? find_font_glyph(font, (uint8_t)*text)
+        const char* next = text;
+        if (parse_font_style_escape(&next, &style)) {
+            current_font = font_for_style(font, style);
+            text = next;
+            continue;
+        }
+
+        const display_font_glyph_t* glyph = current_font
+            ? find_font_glyph(current_font, (uint8_t)*text)
             : NULL;
-        if (!font || glyph) {
-            const int advance = font ? glyph->advance : 8;
+        if (!current_font || glyph) {
+            const int advance = current_font ? glyph->advance : 8;
             width += (size_t)advance * scale;
         }
         if (width > INT_MAX) {
@@ -699,22 +794,27 @@ void display_draw_string_with_font(int x, int y, const char* text, const display
     if (!text || scale == 0) {
         return;
     }
-    if (!font) {
-        display_draw_string(x, y, text, rotation, scale, gray);
-        return;
-    }
 
     int cursor_x = x;
     int cursor_y = y;
+    uint8_t style = font ? font->style : DISPLAY_FONT_STYLE_REGULAR;
+    const display_font_t* current_font = font;
     while (*text) {
-        const uint8_t code = (uint8_t)*text++;
-        const display_font_glyph_t* glyph = find_font_glyph(font, code);
-        if (!glyph) {
+        const char* next = text;
+        if (parse_font_style_escape(&next, &style)) {
+            current_font = font_for_style(font, style);
+            text = next;
             continue;
         }
 
-        display_draw_character_with_font(cursor_x, cursor_y, code, font, rotation, scale, gray);
-        const int advance = glyph->advance * (int)scale;
+        const uint8_t code = (uint8_t)*text++;
+        const display_font_glyph_t* glyph = current_font ? find_font_glyph(current_font, code) : NULL;
+        if (current_font && !glyph) {
+            continue;
+        }
+
+        display_draw_character_with_font(cursor_x, cursor_y, code, current_font, rotation, scale, gray);
+        const int advance = (current_font ? glyph->advance : 8) * (int)scale;
         switch (rotation) {
             case DISPLAY_ROTATE_0:
                 cursor_x += advance;

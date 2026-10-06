@@ -1,314 +1,22 @@
-#include <inttypes.h>
-#include <stdio.h>
+#include <stdint.h>
+
+#include "demo.h"
 #include "display.h"
-#include "input.h"
-#include "m5paper.h"
-#include "widget.h"
-#include "widget_button.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "fonts/fonts.h"
+#include "input.h"
+#include "m5paper.h"
+#include "widget.h"
 
 static const char* TAG = "main";
-static const uint16_t TEST_SPRITE_SCALE = 8;
-static const uint32_t BATTERY_TEXT_PERIOD_FRAMES = 5;
-static const uint32_t INPUT_TIMEOUT_MS = 2000;
-static const uint16_t TOUCH_MARKER_RADIUS = 12;
-#define TOUCH_MARKER_CAPACITY 128
-
-typedef struct demo_box_s {
-    int x;
-    int y;
-    int vx;
-    int vy;
-    int w;
-    int h;
-} demo_sprite_t;
-
-static display_pixmap_t s_test_sprite;
-static demo_sprite_t s_sprite;
-static uint32_t s_frame;
 static widget_window_t s_root_window;
-static widget_window_t s_touch_window;
-static widget_button_t s_reset_button;
 
-typedef struct touch_marker_s {
-    uint16_t x;
-    uint16_t y;
-} touch_marker_t;
-
-static touch_marker_t s_touch_markers[TOUCH_MARKER_CAPACITY];
-static size_t s_touch_marker_count;
-
-
-static const char* const s_test_pixmap[] = {
-    "24 20 4 1",
-    ". c None",
-    "X c #000000",
-    "o c #666666",
-    "+ c #DDDDDD",
-    "........................",
-    "..........XXXX..........",
-    "........XXXXXXXX........",
-    ".......XXooooooXX.......",
-    "......XXo++++++oXX......",
-    ".....XXo++XXXX++oXX.....",
-    "....XXo++XXXXXX++oXX....",
-    "...XXo++XX++++XX++oXX...",
-    "...XXo++XX++++XX++oXX...",
-    "...XXo++XXXXXXXX++oXX...",
-    "...XXo++++++++++++oXX...",
-    "....XXo++XXXXXX++oXX....",
-    ".....XXo++XXXX++oXX.....",
-    "......XXo++++++oXX......",
-    ".......XXooooooXX.......",
-    "........XXXXXXXX........",
-    ".......XX++XX++XX.......",
-    "......XX++XXXX++XX......",
-    "......XX++X..X++XX......",
-    "......XXXXXXXXXXXX......",
-    NULL,
-};
-
-static void draw_battery_text(float battery_voltage) {
-    char text[32];
-
-    snprintf(text, sizeof(text), "BAT %.3fV", battery_voltage);
-    display_fill_rect(30, 430, 280, 38, 0xEE);
-    display_draw_string(36, 438, text, DISPLAY_ROTATE_0, 2, 0x10);
-}
-
-static void render_static_demo(void) {
-    const uint16_t w = display_width();
-    const uint16_t h = display_height();
-    const int split_x = w / 2;
-
-    ESP_LOGI(TAG, "Draw static demo");
-
-    display_clear(0xF4);
-    display_fill_rect(0, 0, split_x, h, 0xEE);
-    display_stroke_rect(18, 18, split_x - 36, h - 36, 4, 0x20);
-    display_fill_rect(36, 42, 80, 50, 0x10);
-    display_fill_rect(132, 42, 120, 50, 0x90);
-    display_stroke_rect(36, 112, 216, 96, 5, 0x40);
-    display_stroke_rect(70, 146, 148, 28, 2, 0x00);
-    display_draw_roundrect(278, 42, 140, 86, 18, 5, 0x30);
-    display_draw_ellipse(348, 176, 62, 36, 4, 0x70);
-    display_draw_string(44, 224, "PRIMITIVES", DISPLAY_ROTATE_0, 2, 0x10);
-    display_draw_string_with_font(44, 256, "MeepMeep!", &font_eurex24i, DISPLAY_ROTATE_0, 2, 0x00);
-    display_draw_string_with_font(44, 297, "(define meep 1)", &font_bigfnt, DISPLAY_ROTATE_0, 1, 0x00);
-    display_draw_string(430, 84, "M5PAPER", DISPLAY_ROTATE_90, 2, 0x20);
-    display_draw_line(32, h - 180, split_x - 32, h - 180, 3, 0x10);
-    display_draw_line(48, h - 72, split_x - 60, h - 220, 4, 0x70);
-    display_draw_line(60, h - 220, split_x - 48, h - 72, 2, 0xA0);
-    display_draw_string_with_font(44, 472, "Hello, World!", &font_swiss20, DISPLAY_ROTATE_0, 1, 0x00);
-    display_draw_string_with_font(200, 472, "Hello, bold World!", &font_swiss20b, DISPLAY_ROTATE_0, 1, 0x00);
-}
-
-static void draw_sprite(const demo_sprite_t* sprite) {
-    display_pixmap_blit(sprite->x, sprite->y, &s_test_sprite, DISPLAY_ROTATE_0, TEST_SPRITE_SCALE, 0xFF);
-}
-
-static void draw_touch_marker(uint16_t x, uint16_t y) {
-    display_draw_ellipse((int)x, (int)y, TOUCH_MARKER_RADIUS, TOUCH_MARKER_RADIUS, 2, 0x10);
-    display_draw_line((int)x - 7, (int)y, (int)x + 7, (int)y, 2, 0x10);
-    display_draw_line((int)x, (int)y - 7, (int)x, (int)y + 7, 2, 0x10);
-}
-
-static void draw_touch_markers(void) {
-    for (size_t i = 0; i < s_touch_marker_count; ++i) {
-        draw_touch_marker(s_touch_markers[i].x, s_touch_markers[i].y);
-    }
-}
-
-static void append_touch_marker(uint16_t x, uint16_t y) {
-    if (s_touch_marker_count == TOUCH_MARKER_CAPACITY) {
-        for (size_t i = 1; i < TOUCH_MARKER_CAPACITY; ++i) {
-            s_touch_markers[i - 1] = s_touch_markers[i];
-        }
-        s_touch_marker_count--;
-    }
-
-    s_touch_markers[s_touch_marker_count++] = (touch_marker_t){
-        .x = x,
-        .y = y,
-    };
-}
-
-static void reset_sprite(demo_sprite_t* sprite) {
-    *sprite = (demo_sprite_t){
-        .x = (int)(display_width() / 2) + 36,
-        .y = 44,
-        .vx = 26,
-        .vy = 18,
-        .w = s_test_sprite.width * TEST_SPRITE_SCALE,
-        .h = s_test_sprite.height * TEST_SPRITE_SCALE,
-    };
-}
-
-static void step_sprite(demo_sprite_t* sprite) {
-    const int min_x = (int)(display_width() / 2) + 24;
-    const int max_x = (int)display_width() - sprite->w - 24;
-    const int min_y = 24;
-    const int max_y = (int)display_height() - sprite->h - 24;
-
-    sprite->x += sprite->vx;
-    sprite->y += sprite->vy;
-
-    if (sprite->x <= min_x || sprite->x >= max_x) {
-        sprite->vx = -sprite->vx;
-        if (sprite->x < min_x) {
-            sprite->x = min_x;
-        }
-        if (sprite->x > max_x) {
-            sprite->x = max_x;
-        }
-    }
-
-    if (sprite->y <= min_y || sprite->y >= max_y) {
-        sprite->vy = -sprite->vy;
-        if (sprite->y < min_y) {
-            sprite->y = min_y;
-        }
-        if (sprite->y > max_y) {
-            sprite->y = max_y;
-        }
-    }
-}
-
-static void update_sprite_frame(uint32_t frame, demo_sprite_t* sprite) {
-    ESP_LOGI(TAG, "Draw demo frame %" PRIu32, frame);
-
-    display_fill_rect(sprite->x, sprite->y, sprite->w, sprite->h, 0xF4);
-    step_sprite(sprite);
-    draw_sprite(sprite);
-    draw_touch_markers();
-    display_update();
-}
-
-static const char* input_button_name(input_button_t button) {
-    switch (button) {
-        case INPUT_BUTTON_UP:
-            return "up";
-        case INPUT_BUTTON_CENTER:
-            return "center";
-        case INPUT_BUTTON_DOWN:
-            return "down";
-        default:
-            return "?";
-    }
-}
-
-static void demo_root_draw(widget_window_t* window) {
-    (void)window;
-    render_static_demo();
-    draw_sprite(&s_sprite);
-}
-
-static void demo_reset(void) {
-    s_touch_marker_count = 0;
-    s_frame = 0;
-    reset_sprite(&s_sprite);
-    widget_draw(&s_root_window);
-    display_update();
-}
-
-static void demo_reset_clicked(widget_button_t* button, void* context) {
-    (void)button;
-    (void)context;
-    demo_reset();
-}
-
-static bool demo_root_event(widget_window_t* window, const input_event_t* event) {
-    (void)window;
-    if (event->type == INPUT_EVENT_DIRECTIONAL_BUTTON) {
-        ESP_LOGI(TAG, "Button %s %s mask=0x%02x",
-                 input_button_name(event->button.button),
-                 event->button.pressed ? "pressed" : "released",
-                 event->button.pressed_mask);
-        if (event->button.button == INPUT_BUTTON_CENTER && event->button.pressed) {
-            demo_reset();
-        }
-        return true;
-    }
-
-    if (event->type != INPUT_EVENT_TIMEOUT) {
-        return false;
-    }
-
-    float battery_voltage = 0.0f;
-    const bool battery_ok = m5paper_battery_voltage(&battery_voltage);
-    if (battery_ok) {
-        ESP_LOGI(TAG, "Battery voltage: %.3f V", battery_voltage);
-    } else {
-        ESP_LOGW(TAG, "Battery voltage read failed");
-    }
-
-    if ((s_frame % BATTERY_TEXT_PERIOD_FRAMES) == 0 && battery_ok) {
-        draw_battery_text(battery_voltage);
-    }
-    update_sprite_frame(s_frame++, &s_sprite);
-    return true;
-}
-
-static void demo_touch_draw(widget_window_t* window) {
-    (void)window;
-    draw_touch_markers();
-}
-
-static bool demo_touch_event(widget_window_t* window, const input_event_t* event) {
-    (void)window;
-    if (event->type == INPUT_EVENT_TOUCH_RELEASE) {
-        ESP_LOGI(TAG, "Touch release display=(%u,%u)", event->touch.x, event->touch.y);
-        return true;
-    }
-    if (event->type != INPUT_EVENT_TOUCH_PRESS && event->type != INPUT_EVENT_TOUCH_MOVE) {
-        return false;
-    }
-
-    append_touch_marker(event->touch.x, event->touch.y);
-    draw_touch_marker(event->touch.x, event->touch.y);
-    display_update();
-    ESP_LOGI(TAG, "Touch %s raw=(%u,%u) display=(%u,%u) size=%u points=%u",
-             event->type == INPUT_EVENT_TOUCH_PRESS ? "press" : "move",
-             event->touch.raw.x, event->touch.raw.y,
-             event->touch.x, event->touch.y,
-             event->touch.raw.size, event->touch.raw.points);
-    return true;
-}
-
-static const widget_class_t s_demo_root_class = {
-    .draw = demo_root_draw,
-    .event = demo_root_event,
-};
-
-static const widget_class_t s_demo_touch_class = {
-    .draw = demo_touch_draw,
-    .event = demo_touch_event,
-};
-
-void app_main(void)
-{
-    ESP_LOGI(TAG, "hello world");
-
+void app_main(void) {
+    ESP_LOGI(TAG, "M5Paper widget demos");
     m5paper_init();
     display_init(2300);
-    if (!display_pixmap_from_xbm3(&s_test_sprite, s_test_pixmap)) {
-        ESP_LOGE(TAG, "Failed to decode test pixmap");
-        return;
-    }
-    reset_sprite(&s_sprite);
-    widget_window_init(&s_root_window, &s_demo_root_class,
-                       (widget_rect_t){0, 0, display_width(), display_height()}, NULL);
-    widget_window_init(&s_touch_window, &s_demo_touch_class,
-                       (widget_rect_t){0, 0, display_width(), display_height()}, NULL);
-    widget_window_add_child(&s_root_window, &s_touch_window);
-    widget_button_init(&s_reset_button, (widget_rect_t){55, 330, 180, 64}, "Reset",
-                       demo_reset_clicked, NULL);
-    widget_window_add_child(&s_root_window, &s_reset_button.window);
-    widget_draw(&s_root_window);
-    display_update();
+    demo_init(&s_root_window);
 
     const esp_err_t input_err = input_init();
     if (input_err != ESP_OK) {
@@ -317,14 +25,13 @@ void app_main(void)
 
     while (1) {
         input_event_t event;
-        const esp_err_t event_err = input_wait_for_event_or_timeout(&event, INPUT_TIMEOUT_MS);
+        const esp_err_t event_err = input_wait_for_event_or_timeout(
+            &event, demo_event_timeout_ms());
         if (event_err != ESP_OK) {
             ESP_LOGW(TAG, "Input wait failed: %s", esp_err_to_name(event_err));
-            vTaskDelay(pdMS_TO_TICKS(INPUT_TIMEOUT_MS));
+            vTaskDelay(pdMS_TO_TICKS(250));
             continue;
         }
-
         widget_dispatch_event(&s_root_window, &event);
-    }   
-
+    }
 }

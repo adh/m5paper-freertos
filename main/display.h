@@ -50,6 +50,7 @@ void display_draw_line(int x0, int y0, int x1, int y1, uint16_t thickness, uint8
 void display_draw_ellipse(int cx, int cy, uint16_t rx, uint16_t ry, uint16_t thickness, uint8_t gray);
 void display_draw_character(int x, int y, char c, display_rotation_t rotation, uint16_t scale, uint8_t gray);
 void display_draw_string(int x, int y, const char* text, display_rotation_t rotation, uint16_t scale, uint8_t gray);
+/* Font-aware strings accept ANSI SGR 0, 1, 3, 22, and 23 for face selection. */
 int display_measure_string(const display_font_t* font, const char* text, uint16_t scale);
 int display_measure_string_height(const display_font_t* font, uint16_t scale);
 void display_draw_character_with_font(int x, int y, uint8_t c, const display_font_t* font,
