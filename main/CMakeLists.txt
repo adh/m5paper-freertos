@@ -1,2 +1,5 @@
-idf_component_register(SRCS "main.c" "demo.c" "it8951.c" "m5paper.c" "display.c" "fonts/fonts.c" "gt911.c" "input.c" "widget.c" "widget_button.c" "widget_checkbox.c" "widget_radio_button.c"
-                    INCLUDE_DIRS ".")
+idf_component_register(
+    SRCS "main.c" "demo.c"
+    INCLUDE_DIRS "."
+    PRIV_REQUIRES m5paper_ui
+)

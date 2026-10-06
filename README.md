@@ -1,4 +1,26 @@
-# M5Paper FreeRTOS playground
+# M5Paper FreeRTOS UI
+
+This repository contains the reusable `m5paper_ui` ESP-IDF component and a
+demo application that exercises it on the original M5Stack M5Paper.
+
+## Reusable component
+
+The component lives in `components/m5paper_ui`; the project in `main` is only
+an example consumer. To use it in another ESP-IDF 5.x project, copy the
+component directory into that project's `components` directory, or reference
+this repository and component path from `idf_component.yml`:
+
+```yaml
+dependencies:
+  m5paper_ui:
+    git: https://github.com/adh/m5paper-freertos.git
+    path: components/m5paper_ui
+```
+
+The component targets `esp32` and currently uses the original M5Paper's fixed
+GPIO assignments. See
+[`components/m5paper_ui/README.md`](components/m5paper_ui/README.md) for its
+contents and a minimal initialization example.
 
 ## Demo application
 
@@ -17,11 +39,11 @@ input, while Animation and System request their own event-loop timeouts.
 
 ## Widget tree
 
-`main/widget.h` provides an allocation-free window tree. Applications own the
-`widget_window_t` objects, attach them with `widget_window_add_child()`, and
-give each window a `widget_class_t` containing optional draw and event
-callbacks. Window frames are relative to their parents; later children are in
-front of earlier children.
+`components/m5paper_ui/include/widget.h` provides an allocation-free window
+tree. Applications own the `widget_window_t` objects, attach them with
+`widget_window_add_child()`, and give each window a `widget_class_t` containing
+optional draw and event callbacks. Window frames are relative to their parents;
+later children are in front of earlier children.
 
 The application event loop is intentionally small:
 
@@ -47,10 +69,10 @@ single e-paper refresh.
 
 ## Proportional fonts
 
-The BDF-like JSON files in `main/fonts` are compiled into row-packed, 1-bit C
-data. The generated header exports `font_eurex24i`, `font_swiss20`, and
-`font_swiss20b` as `display_font_t` values. Drawing honors each glyph's advance
-and left bearing, including at all four display rotations:
+The BDF-like JSON files in `components/m5paper_ui/fonts` are compiled into
+row-packed, 1-bit C data. The generated header exports `font_eurex24i`,
+`font_swiss20`, and `font_swiss20b` as `display_font_t` values. Drawing honors
+each glyph's advance and left bearing, including at all four display rotations:
 
 ```c
 #include "fonts/fonts.h"
@@ -90,8 +112,9 @@ including `DISPLAY_FONT_BOLD_ITALIC_ON` for the combined form.
 Regenerate the C data after editing or adding a JSON font with:
 
 ```sh
-tools/font_json_to_c.py main/fonts/*.json \
-  --header main/fonts/fonts.h --source main/fonts/fonts.c
+tools/font_json_to_c.py components/m5paper_ui/fonts/*.json \
+  --header components/m5paper_ui/include/fonts/fonts.h \
+  --source components/m5paper_ui/src/fonts.c
 ```
 
 Pass the same arguments with `--check` in CI to verify that the checked-in C
@@ -100,10 +123,11 @@ accept `NULL` as the font to select the legacy fixed 8x16 font.
 
 ### Button
 
-`main/widget_button.h` supplies a flat monochrome button class. It uses a white
-background with black text and a 2 px black border normally, then inverts those
-colors while captured touch input is inside its bounds. It calls `onclick` only
-when the gesture is released inside the button:
+`components/m5paper_ui/include/widget_button.h` supplies a flat monochrome
+button class. It uses a white background with black text and a 2 px black
+border normally, then inverts those colors while captured touch input is inside
+its bounds. It calls `onclick` only when the gesture is released inside the
+button:
 
 ```c
 widget_button_t save_button;
@@ -123,9 +147,9 @@ batchable by the application.
 
 ### Checkbox
 
-`main/widget_checkbox.h` supplies an independently toggled checkbox. Its whole
-window is the touch target, and `onchange` receives the new checked state after
-a successful release:
+`components/m5paper_ui/include/widget_checkbox.h` supplies an independently
+toggled checkbox. Its whole window is the touch target, and `onchange` receives
+the new checked state after a successful release:
 
 ```c
 widget_checkbox_t wifi_checkbox;
@@ -174,35 +198,3 @@ GC16 every 32 fast updates. Any GC16 update that covers the accumulated region
 also resets the cleanup counter. IT8951 timing logs include the selected mode,
 upload time, and panel update time.
 
-# Original ESP-IDF sample notes
-
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
-
-This is the simplest buildable example. The example is used by command `idf.py create-project`
-that copies the project to user specified path and set it's name. For more information follow the [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project)
-
-
-
-## How to use example
-We encourage the users to use the example as a template for the new projects.
-A recommended way is to follow the instructions on a [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project).
-
-## Example folder contents
-
-The project **sample_project** contains one source file in C language [main.c](main/main.c). The file is located in folder [main](main).
-
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt`
-files that provide set of directives and instructions describing the project's source files and targets
-(executable, library, or both). 
-
-Below is short explanation of remaining files in the project folder.
-
-```
-├── CMakeLists.txt
-├── main
-│   ├── CMakeLists.txt
-│   └── main.c
-└── README.md                  This is the file you are currently reading
-```
-Additionally, the sample project contains Makefile and component.mk files, used for the legacy Make based build system. 
-They are not used or needed when building with CMake and idf.py.

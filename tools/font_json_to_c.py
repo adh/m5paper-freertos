@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert the BDF-like JSON fonts in main/fonts to compact C definitions."""
+"""Convert the m5paper_ui BDF-like JSON fonts to compact C definitions."""
 
 from __future__ import annotations
 
