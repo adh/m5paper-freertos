@@ -22,8 +22,11 @@ typedef struct damage_state_s {
 } damage_state_t;
 
 static uint8_t* s_framebuffer;
+static uint16_t s_panel_width;
+static uint16_t s_panel_height;
 static uint16_t s_width;
 static uint16_t s_height;
+static display_rotation_t s_rotation;
 static damage_state_t s_damage;
 static damage_state_t s_fast_damage;
 static uint16_t s_fast_update_count;
@@ -297,7 +300,51 @@ static void set_pixel_unchecked(int x, int y, uint8_t gray) {
         return;
     }
 
-    s_framebuffer[(size_t)y * s_width + x] = gray;
+    int panel_x = x;
+    int panel_y = y;
+    switch (s_rotation) {
+        case DISPLAY_ROTATE_90:
+            panel_x = s_panel_width - 1 - y;
+            panel_y = x;
+            break;
+        case DISPLAY_ROTATE_180:
+            panel_x = s_panel_width - 1 - x;
+            panel_y = s_panel_height - 1 - y;
+            break;
+        case DISPLAY_ROTATE_270:
+            panel_x = y;
+            panel_y = s_panel_height - 1 - x;
+            break;
+        case DISPLAY_ROTATE_0:
+        default:
+            break;
+    }
+
+    s_framebuffer[(size_t)panel_y * s_panel_width + panel_x] = gray;
+}
+
+static uint8_t get_pixel_unchecked(int x, int y) {
+    int panel_x = x;
+    int panel_y = y;
+    switch (s_rotation) {
+        case DISPLAY_ROTATE_90:
+            panel_x = s_panel_width - 1 - y;
+            panel_y = x;
+            break;
+        case DISPLAY_ROTATE_180:
+            panel_x = s_panel_width - 1 - x;
+            panel_y = s_panel_height - 1 - y;
+            break;
+        case DISPLAY_ROTATE_270:
+            panel_x = y;
+            panel_y = s_panel_height - 1 - x;
+            break;
+        case DISPLAY_ROTATE_0:
+        default:
+            break;
+    }
+
+    return s_framebuffer[(size_t)panel_y * s_panel_width + panel_x];
 }
 
 static void draw_glyph_pixel(int x, int y, int gx, int gy, display_rotation_t rotation, uint16_t scale, uint8_t gray) {
@@ -499,13 +546,44 @@ static bool point_in_roundrect_local(int px, int py, int w, int h, int radius) {
 
 void display_init(uint16_t vcomm) {
     it8951_init(vcomm);
-    s_width = it8951_width();
-    s_height = it8951_height();
+    s_panel_width = it8951_width();
+    s_panel_height = it8951_height();
+    s_rotation = DISPLAY_ROTATE_0;
+    s_width = s_panel_width;
+    s_height = s_panel_height;
     s_framebuffer = it8951_framebuffer();
-    memset(s_framebuffer, 0xFF, (size_t)s_width * s_height);
+    memset(s_framebuffer, 0xFF, (size_t)s_panel_width * s_panel_height);
     s_damage.dirty = false;
     s_fast_damage.dirty = false;
     s_fast_update_count = 0;
+}
+
+void display_set_rotation(display_rotation_t rotation) {
+    if (rotation < DISPLAY_ROTATE_0 || rotation > DISPLAY_ROTATE_270) {
+        ESP_LOGE(TAG, "Invalid display rotation: %d", (int)rotation);
+        return;
+    }
+    if (!s_framebuffer) {
+        ESP_LOGE(TAG, "Display rotation set before initialization");
+        return;
+    }
+
+    s_rotation = rotation;
+    if (rotation == DISPLAY_ROTATE_90 || rotation == DISPLAY_ROTATE_270) {
+        s_width = s_panel_height;
+        s_height = s_panel_width;
+    } else {
+        s_width = s_panel_width;
+        s_height = s_panel_height;
+    }
+    s_damage.dirty = false;
+    display_clear(0xFF);
+    s_fast_damage.dirty = false;
+    s_fast_update_count = 0;
+}
+
+display_rotation_t display_rotation(void) {
+    return s_rotation;
 }
 
 uint16_t display_width(void) {
@@ -521,7 +599,7 @@ uint8_t* display_framebuffer(void) {
 }
 
 void display_clear(uint8_t gray) {
-    memset(s_framebuffer, gray, (size_t)s_width * s_height);
+    memset(s_framebuffer, gray, (size_t)s_panel_width * s_panel_height);
     mark_damage(0, 0, s_width, s_height);
 }
 
@@ -530,8 +608,16 @@ void display_fill_rect(int x, int y, int w, int h, uint8_t gray) {
         return;
     }
 
-    for (int yy = y; yy < y + h; ++yy) {
-        memset(&s_framebuffer[(size_t)yy * s_width + x], gray, (size_t)w);
+    if (s_rotation == DISPLAY_ROTATE_0) {
+        for (int yy = y; yy < y + h; ++yy) {
+            memset(&s_framebuffer[(size_t)yy * s_panel_width + x], gray, (size_t)w);
+        }
+    } else {
+        for (int yy = y; yy < y + h; ++yy) {
+            for (int xx = x; xx < x + w; ++xx) {
+                set_pixel_unchecked(xx, yy, gray);
+            }
+        }
     }
 
     mark_damage(x, y, w, h);
@@ -907,7 +993,7 @@ bool display_pixmap_blit(int x, int y, const display_pixmap_t* pixmap, display_r
                         continue;
                     }
 
-                    s_framebuffer[(size_t)dst_y * s_width + dst_x] = gray;
+                    set_pixel_unchecked(dst_x, dst_y, gray);
                     touched = true;
                 }
             }
@@ -994,7 +1080,14 @@ bool display_pixmap_get(display_pixmap_t* pixmap, int x, int y, int w, int h) {
     }
 
     for (int yy = 0; yy < h; ++yy) {
-        memcpy(&pixels[(size_t)yy * w], &s_framebuffer[(size_t)(y + yy) * s_width + x], (size_t)w);
+        if (s_rotation == DISPLAY_ROTATE_0) {
+            memcpy(&pixels[(size_t)yy * w],
+                   &s_framebuffer[(size_t)(y + yy) * s_panel_width + x], (size_t)w);
+            continue;
+        }
+        for (int xx = 0; xx < w; ++xx) {
+            pixels[(size_t)yy * w + xx] = get_pixel_unchecked(x + xx, y + yy);
+        }
     }
 
     display_pixmap_free(pixmap);
@@ -1055,12 +1148,41 @@ static void normalize_update_rect(display_rect_t* rect) {
     }
 
     if ((rect->w & 1u) != 0u) {
-        if ((uint32_t)rect->x + rect->w < s_width) {
+        if ((uint32_t)rect->x + rect->w < s_panel_width) {
             rect->w += 1;
         } else if (rect->x > 0) {
             rect->x -= 1;
             rect->w += 1;
         }
+    }
+}
+
+static display_rect_t logical_to_panel_rect(display_rect_t rect) {
+    switch (s_rotation) {
+        case DISPLAY_ROTATE_90:
+            return (display_rect_t){
+                .x = (uint16_t)(s_panel_width - rect.y - rect.h),
+                .y = rect.x,
+                .w = rect.h,
+                .h = rect.w,
+            };
+        case DISPLAY_ROTATE_180:
+            return (display_rect_t){
+                .x = (uint16_t)(s_panel_width - rect.x - rect.w),
+                .y = (uint16_t)(s_panel_height - rect.y - rect.h),
+                .w = rect.w,
+                .h = rect.h,
+            };
+        case DISPLAY_ROTATE_270:
+            return (display_rect_t){
+                .x = rect.y,
+                .y = (uint16_t)(s_panel_height - rect.x - rect.w),
+                .w = rect.h,
+                .h = rect.w,
+            };
+        case DISPLAY_ROTATE_0:
+        default:
+            return rect;
     }
 }
 
@@ -1106,40 +1228,44 @@ static bool display_rect_contains_damage(const display_rect_t* rect, const damag
 }
 
 bool display_update_with_mode(display_update_mode_t mode) {
-    display_rect_t rect;
+    display_rect_t logical_rect;
 
     if (!display_update_mode_is_valid(mode)) {
         ESP_LOGE(TAG, "Invalid update mode: %d", (int)mode);
         return false;
     }
 
-    if (!display_damaged(&rect)) {
+    if (!display_damaged(&logical_rect)) {
         ESP_LOGI(TAG, "No damage to update");
         return false;
     }
 
-    normalize_update_rect(&rect);
     display_update_mode_t actual_mode = mode;
     if (display_update_mode_is_fast(mode) &&
         s_fast_update_count + 1 >= DISPLAY_FAST_UPDATE_CLEANUP_INTERVAL) {
         actual_mode = DISPLAY_UPDATE_MODE_GC16;
-        display_rect_include_damage(&rect, &s_fast_damage);
-        normalize_update_rect(&rect);
+        display_rect_include_damage(&logical_rect, &s_fast_damage);
         ESP_LOGI(TAG, "Periodic GC16 cleanup after %u fast updates", s_fast_update_count);
     }
 
+    display_rect_t panel_rect = logical_to_panel_rect(logical_rect);
+    normalize_update_rect(&panel_rect);
+
     ESP_LOGI(TAG, "Update damaged region x=%u y=%u w=%u h=%u mode=%u",
-             rect.x, rect.y, rect.w, rect.h, (unsigned int)actual_mode);
+             logical_rect.x, logical_rect.y, logical_rect.w, logical_rect.h,
+             (unsigned int)actual_mode);
     it8951_blit_8bpp_stride_mode(
-        rect.x, rect.y, rect.w, rect.h,
-        s_framebuffer + ((size_t)rect.y * s_width + rect.x), s_width,
+        panel_rect.x, panel_rect.y, panel_rect.w, panel_rect.h,
+        s_framebuffer + ((size_t)panel_rect.y * s_panel_width + panel_rect.x),
+        s_panel_width,
         (it8951_update_mode_t)actual_mode);
 
     if (display_update_mode_is_fast(actual_mode)) {
         ++s_fast_update_count;
-        damage_include(&s_fast_damage, rect.x, rect.y, rect.w, rect.h);
+        damage_include(&s_fast_damage, logical_rect.x, logical_rect.y,
+                       logical_rect.w, logical_rect.h);
     } else if (actual_mode == DISPLAY_UPDATE_MODE_GC16 &&
-               display_rect_contains_damage(&rect, &s_fast_damage)) {
+               display_rect_contains_damage(&logical_rect, &s_fast_damage)) {
         s_fast_update_count = 0;
         s_fast_damage.dirty = false;
     }

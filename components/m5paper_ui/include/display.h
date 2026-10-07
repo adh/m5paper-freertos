@@ -39,6 +39,8 @@ typedef enum display_update_mode_e {
 } display_update_mode_t;
 
 void display_init(uint16_t vcomm);
+void display_set_rotation(display_rotation_t rotation);
+display_rotation_t display_rotation(void);
 uint16_t display_width(void);
 uint16_t display_height(void);
 uint8_t* display_framebuffer(void);

@@ -4,6 +4,7 @@
 
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
+#include "display.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
@@ -89,8 +90,25 @@ static void input_set_touch_event(input_event_t* event, input_event_type_t type,
 
     memset(event, 0, sizeof(*event));
     event->type = type;
-    event->touch.x = raw_y;
-    event->touch.y = (INPUT_TOUCH_RAW_WIDTH - 1) - raw_x;
+    switch (display_rotation()) {
+        case DISPLAY_ROTATE_90:
+            event->touch.x = (INPUT_TOUCH_RAW_WIDTH - 1) - raw_x;
+            event->touch.y = (INPUT_TOUCH_RAW_HEIGHT - 1) - raw_y;
+            break;
+        case DISPLAY_ROTATE_180:
+            event->touch.x = (INPUT_TOUCH_RAW_HEIGHT - 1) - raw_y;
+            event->touch.y = raw_x;
+            break;
+        case DISPLAY_ROTATE_270:
+            event->touch.x = raw_x;
+            event->touch.y = raw_y;
+            break;
+        case DISPLAY_ROTATE_0:
+        default:
+            event->touch.x = raw_y;
+            event->touch.y = (INPUT_TOUCH_RAW_WIDTH - 1) - raw_x;
+            break;
+    }
     event->touch.raw = *touch;
 }
 

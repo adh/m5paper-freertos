@@ -123,12 +123,13 @@ static void demo_show_screen(demo_screen_id_t screen_id);
 
 static void draw_page_background(const char* title) {
     const display_font_t* font = &font_swiss20b;
+    const uint16_t scale = display_width() < display_height() ? 1 : 2;
     display_clear(0xF0);
     if (strlen(title) <= 21){
         font = &font_eurex24i;
     }
     display_draw_string_with_font(DEMO_MARGIN, 22, title, font,
-                                  DISPLAY_ROTATE_0, 2, 0x00);
+                                  DISPLAY_ROTATE_0, scale, 0x00);
     display_draw_line(DEMO_MARGIN, DEMO_HEADER_HEIGHT - 1,
                       display_width() - DEMO_MARGIN, DEMO_HEADER_HEIGHT - 1, 2, 0x00);
 }
@@ -245,7 +246,7 @@ static void widgets_draw(widget_window_t* window) {
     draw_page_background("UI widgets");
     display_draw_string_with_font(40, 105, "Checkboxes", &font_swiss20b,
                                   DISPLAY_ROTATE_0, 1, 0x00);
-    display_draw_string_with_font(510, 105, "Radio buttons", &font_swiss20b,
+    display_draw_string_with_font(40, 405, "Radio buttons", &font_swiss20b,
                                   DISPLAY_ROTATE_0, 1, 0x00);
 }
 
@@ -254,18 +255,18 @@ static void primitives_draw(widget_window_t* window) {
     draw_page_background("Drawing primitives and fonts");
     display_fill_rect(40, 115, 90, 55, 0x00);
     display_fill_rect(155, 115, 130, 55, 0x90);
-    display_stroke_rect(320, 110, 210, 76, 5, 0x40);
-    display_draw_roundrect(570, 110, 150, 76, 18, 5, 0x30);
-    display_draw_ellipse(820, 148, 72, 38, 4, 0x70);
-    display_draw_line(42, 220, 280, 350, 5, 0x20);
-    display_draw_line(42, 350, 280, 220, 2, 0x90);
-    display_draw_string_with_font(340, 215, "MeepMeep!", &font_eurex24i,
+    display_stroke_rect(310, 110, 190, 76, 5, 0x40);
+    display_draw_roundrect(40, 215, 150, 76, 18, 5, 0x30);
+    display_draw_ellipse(300, 253, 72, 38, 4, 0x70);
+    display_draw_line(410, 215, 500, 291, 5, 0x20);
+    display_draw_line(410, 291, 500, 215, 2, 0x90);
+    display_draw_string_with_font(40, 340, "MeepMeep!", &font_eurex24i,
                                   DISPLAY_ROTATE_0, 2, 0x00);
-    display_draw_string_with_font(340, 285, "(define demo 1)", &font_bigfnt,
+    display_draw_string_with_font(40, 430, "(define demo 1)", &font_bigfnt,
                                   DISPLAY_ROTATE_0, 1, 0x00);
-    display_draw_string_with_font(340, 355, "Swiss regular", &font_swiss20,
+    display_draw_string_with_font(40, 500, "Swiss regular", &font_swiss20,
                                   DISPLAY_ROTATE_0, 1, 0x00);
-    display_draw_string_with_font(340, 405, "Swiss bold", &font_swiss20b,
+    display_draw_string_with_font(40, 550, "Swiss bold", &font_swiss20b,
                                   DISPLAY_ROTATE_0, 1, 0x00);
 }
 
@@ -455,23 +456,21 @@ void demo_init(widget_window_t* root) {
     widget_window_init(&s_animation_screen, &s_animation_class, full_screen, NULL);
     widget_window_init(&s_system_screen, &s_system_class, full_screen, NULL);
 
-    const int button_width = (display_width() - DEMO_MARGIN * 4) / 3;
+    const int button_width = display_width() - DEMO_MARGIN * 2;
     init_button(&s_menu_widgets_button, &s_menu_screen,
                 (widget_rect_t){DEMO_MARGIN, 155, button_width, DEMO_BUTTON_HEIGHT},
                 "UI widgets", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_WIDGETS);
     init_button(&s_menu_primitives_button, &s_menu_screen,
-                (widget_rect_t){DEMO_MARGIN * 2 + button_width, 155,
-                                button_width, DEMO_BUTTON_HEIGHT},
+                (widget_rect_t){DEMO_MARGIN, 263, button_width, DEMO_BUTTON_HEIGHT},
                 "Primitives", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_PRIMITIVES);
     init_button(&s_menu_touch_button, &s_menu_screen,
-                (widget_rect_t){DEMO_MARGIN * 3 + button_width * 2, 155,
-                                button_width, DEMO_BUTTON_HEIGHT},
+                (widget_rect_t){DEMO_MARGIN, 371, button_width, DEMO_BUTTON_HEIGHT},
                 "Touch", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_TOUCH);
     init_button(&s_menu_animation_button, &s_menu_screen,
-                (widget_rect_t){DEMO_MARGIN, 285, button_width, DEMO_BUTTON_HEIGHT},
+                (widget_rect_t){DEMO_MARGIN, 479, button_width, DEMO_BUTTON_HEIGHT},
                 "Animation", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_ANIMATION);
     init_button(&s_menu_system_button, &s_menu_screen,
-                (widget_rect_t){DEMO_MARGIN * 2 + button_width, 285, button_width, DEMO_BUTTON_HEIGHT},
+                (widget_rect_t){DEMO_MARGIN, 587, button_width, DEMO_BUTTON_HEIGHT},
                 "System", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_SYSTEM);
 
     init_back_button(&s_widgets_back_button, &s_widgets_screen);
@@ -483,13 +482,13 @@ void demo_init(widget_window_t* root) {
                   (widget_rect_t){40, 300, 380, 58}, "Night mode", false);
     widget_radio_group_init(&s_widgets_size_group);
     init_radio_button(&s_widgets_small_radio, &s_widgets_screen,
-                      (widget_rect_t){510, 150, 380, 58}, "Small", false);
+                      (widget_rect_t){40, 450, 380, 58}, "Small", false);
     init_radio_button(&s_widgets_medium_radio, &s_widgets_screen,
-                      (widget_rect_t){510, 225, 380, 58}, "Medium", true);
+                      (widget_rect_t){40, 525, 380, 58}, "Medium", true);
     init_radio_button(&s_widgets_large_radio, &s_widgets_screen,
-                      (widget_rect_t){510, 300, 380, 58}, "Large", false);
+                      (widget_rect_t){40, 600, 380, 58}, "Large", false);
     init_button(&s_widgets_reset_button, &s_widgets_screen,
-                (widget_rect_t){330, 410, 300, 72},
+                (widget_rect_t){120, 710, 300, 72},
                 "Reset controls", widgets_reset_clicked, NULL);
 
     init_back_button(&s_primitives_back_button, &s_primitives_screen);
