@@ -12,7 +12,9 @@
 #include "m5paper.h"
 #include "widget_button.h"
 #include "widget_checkbox.h"
+#include "widget_edit.h"
 #include "widget_radio_button.h"
+#include "widget_select.h"
 
 static const char* TAG = "demo";
 
@@ -29,6 +31,7 @@ static const char* TAG = "demo";
 typedef enum demo_screen_id_e {
     DEMO_SCREEN_MENU = 0,
     DEMO_SCREEN_WIDGETS,
+    DEMO_SCREEN_EDIT,
     DEMO_SCREEN_PRIMITIVES,
     DEMO_SCREEN_TOUCH,
     DEMO_SCREEN_ANIMATION,
@@ -55,6 +58,7 @@ static demo_screen_id_t s_active_screen_id;
 
 static widget_window_t s_menu_screen;
 static widget_window_t s_widgets_screen;
+static widget_window_t s_edit_screen;
 static widget_window_t s_primitives_screen;
 static widget_window_t s_touch_screen;
 static widget_window_t s_touch_canvas;
@@ -62,12 +66,14 @@ static widget_window_t s_animation_screen;
 static widget_window_t s_system_screen;
 
 static widget_button_t s_menu_widgets_button;
+static widget_button_t s_menu_edit_button;
 static widget_button_t s_menu_primitives_button;
 static widget_button_t s_menu_touch_button;
 static widget_button_t s_menu_animation_button;
 static widget_button_t s_menu_system_button;
 static widget_button_t s_widgets_back_button;
 static widget_button_t s_widgets_reset_button;
+static widget_button_t s_edit_back_button;
 static widget_button_t s_primitives_back_button;
 static widget_button_t s_touch_back_button;
 static widget_button_t s_touch_clear_button;
@@ -83,6 +89,14 @@ static widget_radio_group_t s_widgets_size_group;
 static widget_radio_button_t s_widgets_small_radio;
 static widget_radio_button_t s_widgets_medium_radio;
 static widget_radio_button_t s_widgets_large_radio;
+static widget_select_t s_widgets_theme_select;
+static widget_edit_t s_name_edit;
+
+static const char* const s_widgets_theme_options[] = {
+    "Light",
+    "Sepia",
+    "High contrast",
+};
 
 static display_pixmap_t s_sprite_pixmap;
 static demo_sprite_t s_sprite;
@@ -248,6 +262,17 @@ static void widgets_draw(widget_window_t* window) {
                                   DISPLAY_ROTATE_0, 1, 0x00);
     display_draw_string_with_font(40, 405, "Radio buttons", &font_swiss20b,
                                   DISPLAY_ROTATE_0, 1, 0x00);
+    display_draw_string_with_font(40, 685, "Select box", &font_swiss20b,
+                                  DISPLAY_ROTATE_0, 1, 0x00);
+}
+
+static void edit_demo_draw(widget_window_t* window) {
+    (void)window;
+    draw_page_background("Text editing");
+    display_draw_string_with_font(40, 105, "Tap the field to open the full-screen keyboard.",
+                                  &font_swiss20, DISPLAY_ROTATE_0, 1, 0x00);
+    display_draw_string_with_font(40, 180, "Display name", &font_swiss20b,
+                                  DISPLAY_ROTATE_0, 1, 0x00);
 }
 
 static void primitives_draw(widget_window_t* window) {
@@ -333,6 +358,7 @@ static bool app_event(widget_window_t* window, const input_event_t* event) {
 static const widget_class_t s_app_class = {.event = app_event};
 static const widget_class_t s_menu_class = {.draw = menu_draw};
 static const widget_class_t s_widgets_class = {.draw = widgets_draw};
+static const widget_class_t s_edit_demo_class = {.draw = edit_demo_draw};
 static const widget_class_t s_primitives_class = {.draw = primitives_draw};
 static const widget_class_t s_touch_class = {.draw = touch_draw};
 static const widget_class_t s_touch_canvas_class = {
@@ -345,6 +371,7 @@ static const widget_class_t s_system_class = {.draw = system_draw};
 static widget_window_t* screen_for_id(demo_screen_id_t screen_id) {
     switch (screen_id) {
         case DEMO_SCREEN_WIDGETS: return &s_widgets_screen;
+        case DEMO_SCREEN_EDIT: return &s_edit_screen;
         case DEMO_SCREEN_PRIMITIVES: return &s_primitives_screen;
         case DEMO_SCREEN_TOUCH: return &s_touch_screen;
         case DEMO_SCREEN_ANIMATION: return &s_animation_screen;
@@ -354,6 +381,8 @@ static widget_window_t* screen_for_id(demo_screen_id_t screen_id) {
 }
 
 static void demo_show_screen(demo_screen_id_t screen_id) {
+    widget_edit_close(&s_name_edit, false);
+    widget_select_close(&s_widgets_theme_select);
     if (s_active_screen) widget_window_remove(s_active_screen);
     s_active_screen_id = screen_id;
     s_active_screen = screen_for_id(screen_id);
@@ -408,6 +437,18 @@ static void widgets_radio_changed(widget_radio_button_t* button, void* context) 
     ESP_LOGI(TAG, "Radio selection: %s", button->label);
 }
 
+static void widgets_select_changed(widget_select_t* select, size_t selected_index,
+                                   void* context) {
+    (void)context;
+    ESP_LOGI(TAG, "Select choice: %s", select->options[selected_index]);
+}
+
+static void edit_value_changed(widget_edit_t* edit, const char* text, void* context) {
+    (void)edit;
+    (void)context;
+    ESP_LOGI(TAG, "Edited value: %s", text);
+}
+
 static void widgets_reset_clicked(widget_button_t* button, void* context) {
     (void)button;
     (void)context;
@@ -415,6 +456,7 @@ static void widgets_reset_clicked(widget_button_t* button, void* context) {
     widget_checkbox_set_checked(&s_widgets_notifications_checkbox, false);
     widget_checkbox_set_checked(&s_widgets_night_mode_checkbox, false);
     widget_radio_button_set_selected(&s_widgets_medium_radio, true);
+    widget_select_set_selected(&s_widgets_theme_select, 1);
     widget_draw(&s_widgets_screen);
     display_update();
 }
@@ -451,6 +493,7 @@ void demo_init(widget_window_t* root) {
     widget_window_init(root, &s_app_class, full_screen, NULL);
     widget_window_init(&s_menu_screen, &s_menu_class, full_screen, NULL);
     widget_window_init(&s_widgets_screen, &s_widgets_class, full_screen, NULL);
+    widget_window_init(&s_edit_screen, &s_edit_demo_class, full_screen, NULL);
     widget_window_init(&s_primitives_screen, &s_primitives_class, full_screen, NULL);
     widget_window_init(&s_touch_screen, &s_touch_class, full_screen, NULL);
     widget_window_init(&s_animation_screen, &s_animation_class, full_screen, NULL);
@@ -472,6 +515,9 @@ void demo_init(widget_window_t* root) {
     init_button(&s_menu_system_button, &s_menu_screen,
                 (widget_rect_t){DEMO_MARGIN, 587, button_width, DEMO_BUTTON_HEIGHT},
                 "System", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_SYSTEM);
+    init_button(&s_menu_edit_button, &s_menu_screen,
+                (widget_rect_t){DEMO_MARGIN, 695, button_width, DEMO_BUTTON_HEIGHT},
+                "Text editing", menu_button_clicked, (void*)(intptr_t)DEMO_SCREEN_EDIT);
 
     init_back_button(&s_widgets_back_button, &s_widgets_screen);
     init_checkbox(&s_widgets_wifi_checkbox, &s_widgets_screen,
@@ -487,9 +533,20 @@ void demo_init(widget_window_t* root) {
                       (widget_rect_t){40, 525, 380, 58}, "Medium", true);
     init_radio_button(&s_widgets_large_radio, &s_widgets_screen,
                       (widget_rect_t){40, 600, 380, 58}, "Large", false);
+    widget_select_init(&s_widgets_theme_select, (widget_rect_t){40, 730, 460, 64},
+                       s_widgets_theme_options,
+                       sizeof(s_widgets_theme_options) / sizeof(s_widgets_theme_options[0]),
+                       1, widgets_select_changed, NULL);
+    widget_window_add_child(&s_widgets_screen, &s_widgets_theme_select.window);
     init_button(&s_widgets_reset_button, &s_widgets_screen,
-                (widget_rect_t){120, 710, 300, 72},
+                (widget_rect_t){120, 850, 300, 72},
                 "Reset controls", widgets_reset_clicked, NULL);
+
+    init_back_button(&s_edit_back_button, &s_edit_screen);
+    widget_edit_init(&s_name_edit, (widget_rect_t){40, 225, 460, 72},
+                     "M5Paper", edit_value_changed, NULL);
+    widget_edit_set_title(&s_name_edit, "Edit display name");
+    widget_window_add_child(&s_edit_screen, &s_name_edit.window);
 
     init_back_button(&s_primitives_back_button, &s_primitives_screen);
 

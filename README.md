@@ -27,7 +27,8 @@ contents and a minimal initialization example.
 The application opens on a menu instead of combining every test on one screen.
 Its focused screens are:
 
-- **UI widgets** — buttons, independent checkboxes, and an exclusive radio group.
+- **UI widgets** — buttons, checkboxes, radio groups, and a popup select box.
+- **Text editing** — an edit field with a full-screen touch keyboard.
 - **Primitives** — grayscale shapes, lines, ellipses, and bundled fonts.
 - **Touch** — a finger-drawing surface using fast monochrome partial updates.
 - **Animation** — a moving pixmap demonstrating GC16 damage-region updates.
@@ -183,6 +184,51 @@ Checkboxes and radio buttons use the same monochrome press inversion and fast
 partial refresh as ordinary buttons. Their style structures control colors,
 indicator size and border, label spacing, font, and text scale.
 
+### Select box
+
+`components/m5paper_ui/include/widget_select.h` provides a closed selection
+field and a modal popup list. The popup is attached above the select's sibling
+windows, opens above or below the field according to available space, and
+dismisses when the user selects an item or taps outside it:
+
+```c
+static const char* const themes[] = {"Light", "Sepia", "High contrast"};
+widget_select_t theme_select;
+
+widget_select_init(&theme_select, (widget_rect_t){40, 240, 360, 64},
+                   themes, 3, 0, theme_changed, context);
+widget_window_add_child(&root_window, &theme_select.window);
+```
+
+The option array and strings remain owned by the caller. Opening the popup
+temporarily saves the framebuffer region beneath it so closing can restore that
+region with a fast partial update. `widget_select_set_selected()` changes the
+model without invoking `onchange`; `WIDGET_SELECT_NONE` selects the placeholder.
+Call `widget_select_close()` before detaching a window tree containing an open
+select box.
+
+### Edit box and keyboard
+
+`components/m5paper_ui/include/widget_edit.h` provides a single-line edit box.
+Activating it adds a full-page editor above its sibling windows, keeping the
+draft separate from the committed value until the user presses Done. Cancel
+discards the draft:
+
+```c
+widget_edit_t name_edit;
+widget_edit_init(&name_edit, (widget_rect_t){40, 200, 460, 72},
+                 "M5Paper", name_changed, context);
+widget_edit_set_title(&name_edit, "Edit display name");
+widget_window_add_child(&screen, &name_edit.window);
+```
+
+The portrait keyboard provides lowercase and uppercase QWERTY layouts, a
+number/symbol layout, Space, Delete, Cancel, and Done. Values are limited to
+`WIDGET_EDIT_MAX_LENGTH` bytes and are always NUL-terminated. Programmatic
+changes through `widget_edit_set_text()` do not invoke `onchange`. Call
+`widget_edit_close(edit, false)` before detaching a screen containing an open
+editor.
+
 ## E-paper update modes
 
 `display_update()` remains the high-quality GC16 default.
@@ -197,4 +243,3 @@ regions changed by DU, DU4, and A2 and automatically refreshes that area with
 GC16 every 32 fast updates. Any GC16 update that covers the accumulated region
 also resets the cleanup counter. IT8951 timing logs include the selected mode,
 upload time, and panel update time.
-

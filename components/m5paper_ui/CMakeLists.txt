@@ -9,7 +9,9 @@ idf_component_register(
         "src/widget.c"
         "src/widget_button.c"
         "src/widget_checkbox.c"
+        "src/widget_edit.c"
         "src/widget_radio_button.c"
+        "src/widget_select.c"
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "src"
     REQUIRES driver

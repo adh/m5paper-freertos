@@ -7,7 +7,7 @@
 - the IT8951 e-paper display driver and drawing API
 - GT911 touch and physical-button input
 - fixed and proportional bitmap fonts
-- an allocation-free widget tree with button, checkbox, and radio controls
+- an allocation-free widget tree with button, checkbox, radio, select, and edit controls
 
 ## Add to a project
 
