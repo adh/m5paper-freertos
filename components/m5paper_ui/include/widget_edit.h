@@ -26,11 +26,11 @@ typedef struct widget_edit_style_s {
 } widget_edit_style_t;
 
 struct widget_edit_key_s {
-    widget_button_t button;
-    widget_edit_t* edit;
+    widget_rect_t frame;
     uint8_t action;
     char value;
     char label[8];
+    bool visible;
 };
 
 struct widget_edit_s {
@@ -46,6 +46,7 @@ struct widget_edit_s {
     char text[WIDGET_EDIT_MAX_LENGTH + 1];
     char draft[WIDGET_EDIT_MAX_LENGTH + 1];
     size_t draft_length;
+    int pressed_key;
     bool pressed;
     bool editor_open;
     bool uppercase;
