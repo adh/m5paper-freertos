@@ -375,6 +375,7 @@ void widget_edit_init(widget_edit_t* edit, widget_rect_t frame, const char* init
         widget_edit_key_t* key = &edit->keys[i];
         key->edit = edit;
         widget_button_init(&key->button, (widget_rect_t){0}, "", key_clicked, key);
+        widget_button_set_press_feedback(&key->button, false);
         widget_window_add_child(&edit->editor_window, &key->button.window);
     }
     configure_keyboard(edit);

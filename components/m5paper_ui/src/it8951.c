@@ -539,17 +539,28 @@ static void upload_area_8bpp_stride(const it8951_area_t* area, const uint8_t* pi
     set_target_memory_address(it8951_get_vram_base());
     set_target_area((it8951_area_t*)area);
 
+    const size_t transfer_capacity = buffer_len & ~(size_t)1;
+    ESP_ERROR_ASSERT(transfer_capacity >= 2);
+    size_t buffered = 0;
     for (uint16_t row = 0; row < area->h; ++row) {
         const uint8_t* row_pixels = pixels + ((size_t)row * stride);
         size_t remaining = area->w;
 
         while (remaining) {
-            size_t chunk = remaining < buffer_len ? remaining : buffer_len;
-            memcpy(buffer0, row_pixels, chunk);
-            write_data(buffer0, chunk);
+            const size_t available = transfer_capacity - buffered;
+            const size_t chunk = remaining < available ? remaining : available;
+            memcpy(buffer0 + buffered, row_pixels, chunk);
+            buffered += chunk;
             row_pixels += chunk;
             remaining -= chunk;
+            if (buffered == transfer_capacity) {
+                write_data(buffer0, buffered);
+                buffered = 0;
+            }
         }
+    }
+    if (buffered) {
+        write_data(buffer0, buffered);
     }
 
     write_command(IT8951_TCON_LD_IMG_END);

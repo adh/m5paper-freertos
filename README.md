@@ -146,6 +146,11 @@ only changes pure black and white reliably in this slot, so button colors are
 quantized to controller values `0x00` and `0xF0`. Ordinary tree drawing remains
 batchable by the application.
 
+`widget_button_set_press_feedback(button, false)` keeps normal touch capture,
+drag-out cancellation, and callback behavior but suppresses the button's own
+press/release redraws. This is useful for e-paper controls such as keyboard keys
+whose action already produces immediate visual feedback elsewhere.
+
 ### Checkbox
 
 `components/m5paper_ui/include/widget_checkbox.h` supplies an independently

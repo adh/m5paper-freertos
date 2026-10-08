@@ -24,6 +24,7 @@ struct widget_button_s {
     void* onclick_context;
     widget_button_style_t style;
     bool pressed;
+    bool press_feedback;
 };
 
 extern const widget_button_style_t WIDGET_BUTTON_DEFAULT_STYLE;
@@ -32,6 +33,8 @@ void widget_button_init(widget_button_t* button, widget_rect_t frame, const char
                         widget_button_onclick_t onclick, void* context);
 void widget_button_set_label(widget_button_t* button, const char* label);
 void widget_button_set_style(widget_button_t* button, const widget_button_style_t* style);
+/* Disable for controls whose callback provides the only desired visual update. */
+void widget_button_set_press_feedback(widget_button_t* button, bool enabled);
 void widget_button_draw(widget_button_t* button);
 
 #endif

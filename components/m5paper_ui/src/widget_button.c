@@ -81,16 +81,20 @@ static bool widget_button_event_class(widget_window_t* window, const input_event
     const bool inside = widget_button_contains_local_point(button, x, y);
     if (event->type == INPUT_EVENT_TOUCH_PRESS) {
         button->pressed = true;
-        widget_button_draw(button);
-        display_update_with_mode(DISPLAY_UPDATE_MODE_FAST);
+        if (button->press_feedback) {
+            widget_button_draw(button);
+            display_update_with_mode(DISPLAY_UPDATE_MODE_FAST);
+        }
         return true;
     }
 
     if (event->type == INPUT_EVENT_TOUCH_MOVE) {
         if (button->pressed != inside) {
             button->pressed = inside;
-            widget_button_draw(button);
-            display_update_with_mode(DISPLAY_UPDATE_MODE_FAST);
+            if (button->press_feedback) {
+                widget_button_draw(button);
+                display_update_with_mode(DISPLAY_UPDATE_MODE_FAST);
+            }
         }
         return true;
     }
@@ -98,8 +102,10 @@ static bool widget_button_event_class(widget_window_t* window, const input_event
     if (event->type == INPUT_EVENT_TOUCH_RELEASE) {
         const bool clicked = button->pressed && inside;
         button->pressed = false;
-        widget_button_draw(button);
-        display_update_with_mode(DISPLAY_UPDATE_MODE_FAST);
+        if (button->press_feedback) {
+            widget_button_draw(button);
+            display_update_with_mode(DISPLAY_UPDATE_MODE_FAST);
+        }
         if (clicked && button->onclick) {
             button->onclick(button, button->onclick_context);
         }
@@ -125,6 +131,7 @@ void widget_button_init(widget_button_t* button, widget_rect_t frame, const char
         .onclick = onclick,
         .onclick_context = context,
         .style = WIDGET_BUTTON_DEFAULT_STYLE,
+        .press_feedback = true,
     };
     widget_window_init(&button->window, &s_widget_button_class, frame, button);
 }
@@ -138,6 +145,12 @@ void widget_button_set_label(widget_button_t* button, const char* label) {
 void widget_button_set_style(widget_button_t* button, const widget_button_style_t* style) {
     if (button && style) {
         button->style = *style;
+    }
+}
+
+void widget_button_set_press_feedback(widget_button_t* button, bool enabled) {
+    if (button) {
+        button->press_feedback = enabled;
     }
 }
 
