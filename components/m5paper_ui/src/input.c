@@ -240,19 +240,19 @@ esp_err_t input_wait_for_event_or_timeout(input_event_t* event, uint32_t timeout
             return ESP_OK;
         }
 
-        if (wait_forever) {
-            const esp_err_t err = esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-            if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-                return err;
-            }
-        } else {
+        if (!wait_forever) {
             const int64_t sleep_us = remaining_us;
             ESP_RETURN_ON_ERROR(esp_sleep_enable_timer_wakeup((uint64_t)sleep_us), TAG, "enable timeout wakeup");
         }
 
         const int64_t start_us = esp_timer_get_time();
-        ESP_RETURN_ON_ERROR(esp_light_sleep_start(), TAG, "enter light sleep");
+        const esp_err_t sleep_err = esp_light_sleep_start();
         const int64_t elapsed_us = esp_timer_get_time() - start_us;
+        if (!wait_forever) {
+            ESP_RETURN_ON_ERROR(esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER),
+                                TAG, "disable timeout wakeup");
+        }
+        ESP_RETURN_ON_ERROR(sleep_err, TAG, "enter light sleep");
 
         if (!wait_forever) {
             remaining_us -= elapsed_us;
